@@ -14,7 +14,7 @@ from sentence_transformers import SentenceTransformer
 VAULT_DIR = Path(__file__).parent / "vault"
 CHROMA_DIR = Path(__file__).parent / "chroma_db"
 COLLECTION_NAME = "dennou"
-MODEL_NAME = "all-MiniLM-L6-v2"
+MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
 _model = None
 _client = None
