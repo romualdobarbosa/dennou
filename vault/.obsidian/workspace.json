@@ -1,0 +1,193 @@
+{
+  "main": {
+    "id": "eb3d014250bc3be1",
+    "type": "split",
+    "children": [
+      {
+        "id": "d9eb8bb10fe0cded",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "a81e958390410e9a",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "20260528210249-left-join-sql.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "20260528210249-left-join-sql"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "ca57c69ed45b8d91",
+    "type": "split",
+    "children": [
+      {
+        "id": "b979f26eb0d58e00",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "760642a477c92d1a",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "f711ec6d7b0b7c98",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "b25963a955b40c4c",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "right": {
+    "id": "e3af87f14d8817b1",
+    "type": "split",
+    "children": [
+      {
+        "id": "b0c3d4854f04990b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "32e1b1279b36a2e6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "20260528210249-left-join-sql.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 20260528210249-left-join-sql"
+            }
+          },
+          {
+            "id": "7377c30874f66ab9",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "20260528210249-left-join-sql.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 20260528210249-left-join-sql"
+            }
+          },
+          {
+            "id": "4c71cef9e3c55981",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "38b0bd16c250e372",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "286e7c489bd14544",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "20260528210249-left-join-sql.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 20260528210249-left-join-sql"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "a81e958390410e9a",
+  "lastOpenFiles": [
+    "Home.md",
+    "20260528210249-left-join-sql.md",
+    "20260528210249-left-join-sql.md.tmp.247248.99b2848b7d17"
+  ]
+}

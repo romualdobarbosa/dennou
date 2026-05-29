@@ -1,0 +1,9 @@
+{
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "root",
+  "newLinkFormat": "shortest",
+  "showFrontmatter": false,
+  "strictLineBreaks": false,
+  "defaultViewMode": "source",
+  "readableLineLength": true
+}
