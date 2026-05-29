@@ -6,7 +6,7 @@ Personal knowledge base with semantic search. Notes are stored as Markdown in an
 
 - **Obsidian** — note editor and graph view
 - **ChromaDB** — local vector database
-- **Sentence Transformers** (`all-MiniLM-L6-v2`) — local embeddings, no API required
+- **Sentence Transformers** (`paraphrase-multilingual-MiniLM-L12-v2`) — local embeddings, multilingual, no API required
 - **Claude Code** — agent that creates notes and queries the vault before answering
 
 ## Setup
