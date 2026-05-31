@@ -183,6 +183,17 @@
   },
   "active": "1f525118d0ec60bc",
   "lastOpenFiles": [
+    "examples/20260101000005-git-merge.md",
+    "examples/20260101000005-git-merge.md.tmp.307737.50e5f80cef41",
+    "examples/20260101000004-git-branch.md",
+    "examples/20260101000004-git-branch.md.tmp.307737.f10e51d87e81",
+    "examples/20260101000003-git-commit.md",
+    "examples/20260101000003-git-commit.md.tmp.307737.69e296c5bd06",
+    "examples/20260101000002-dicionarios-python.md",
+    "examples/20260101000002-dicionarios-python.md.tmp.307737.4b5145ce0d2e",
+    "examples/20260101000001-listas-python.md",
+    "examples/20260101000001-listas-python.md.tmp.307737.7c47c3fafb18",
+    "examples",
     "20260531150000-remover-duplicatas-coluna-sql.md",
     "20260531150000-remover-duplicatas-coluna-sql.md.tmp.307737.c50b6ab30937",
     "20260529170901-harness-em-agentes-de-codigo.md",
@@ -195,12 +206,7 @@
     "20260529000001-spec-driven-design-vs-domain-driven-design.md.tmp.270817.630859bed9ce",
     "20260528215639-graph-view-obsidian.md",
     "20260528220019-colorir-nos-graph-view-obsidian.md",
-    "20260528220019-colorir-nos-graph-view-obsidian.md.tmp.247248.fbd52086c680",
-    "20260528215639-graph-view-obsidian.md.tmp.247248.221940964615",
     "20260528215213-buscar-notas-no-vault.md",
-    "20260528215213-buscar-notas-no-vault.md.tmp.247248.3fc1db545bff",
-    "20260528214944-filtrar-where-primeira-letra-sql.md.tmp.247248.927dbf79ce36",
-    "Home.md",
-    "20260528210249-left-join-sql.md.tmp.247248.99b2848b7d17"
+    "Home.md"
   ]
 }

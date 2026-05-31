@@ -2,3 +2,7 @@ chroma_db/
 __pycache__/
 *.pyc
 .env
+
+# Notas pessoais — ficam só na máquina
+vault/*.md
+TAGS.md
