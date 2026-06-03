@@ -11,3 +11,6 @@ TAGS.md
 vault/.obsidian/workspace.json
 vault/.obsidian/appearance.json
 vault/.obsidian/themes/
+# graph.json: display pessoal + cores de tag regeneradas pelo embed.py
+# (versioná-lo vazaria as tags do vault privado)
+vault/.obsidian/graph.json
