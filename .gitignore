@@ -6,3 +6,8 @@ __pycache__/
 # Notas pessoais — ficam só na máquina
 vault/*.md
 TAGS.md
+
+# Preferências locais do Obsidian (layout e tema são pessoais por máquina)
+vault/.obsidian/workspace.json
+vault/.obsidian/appearance.json
+vault/.obsidian/themes/
