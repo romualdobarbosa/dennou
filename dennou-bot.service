@@ -1,0 +1,31 @@
+# Serviço systemd (modo usuário) para o bot do Telegram do dennou.
+#
+# Instalação:
+#   mkdir -p ~/.config/systemd/user
+#   cp dennou-bot.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now dennou-bot
+#
+# Logs:        journalctl --user -u dennou-bot -f
+# Reiniciar:   systemctl --user restart dennou-bot
+#
+# Para o bot seguir rodando mesmo com a sessão fechada (sem login gráfico),
+# habilite o "linger" do seu usuário uma vez:
+#   sudo loginctl enable-linger lobbyboy
+
+[Unit]
+Description=dennou Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lobbyboy/dennou
+ExecStart=/usr/bin/python3 /home/lobbyboy/dennou/bot.py
+Restart=on-failure
+RestartSec=5
+# claude vive em ~/.npm-global/bin — precisa estar no PATH do serviço.
+Environment=PATH=/home/lobbyboy/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
