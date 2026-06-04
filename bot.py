@@ -36,6 +36,26 @@ CLAUDE_TIMEOUT = 300          # segundos por mensagem
 TELEGRAM_MAX = 4096          # limite de caracteres por mensagem do Telegram
 POLL_TIMEOUT = 60            # long polling: quanto o getUpdates segura a conexão
 
+# Guarda o session_id da conversa para dar continuidade entre mensagens
+# (sem isso cada `claude -p` começa do zero e "salva isso" perde o contexto).
+SESSION_FILE = PROJECT_DIR / ".bot_session"
+
+
+def load_session() -> str | None:
+    """Lê o session_id salvo, se houver."""
+    if SESSION_FILE.exists():
+        return SESSION_FILE.read_text().strip() or None
+    return None
+
+
+def save_session(session_id: str) -> None:
+    if session_id:
+        SESSION_FILE.write_text(session_id)
+
+
+def clear_session() -> None:
+    SESSION_FILE.unlink(missing_ok=True)
+
 
 def load_env(path: Path) -> None:
     """Carrega KEY=VALUE de um .env simples para o os.environ."""
@@ -85,22 +105,40 @@ def send(chat_id, text: str) -> None:
         tg("sendMessage", chat_id=chat_id, text=text[i:i + TELEGRAM_MAX])
 
 
-def ask_agent(message: str) -> str:
-    """Repassa a mensagem ao Claude headless e devolve o texto da resposta."""
+def _run_claude(message: str, session_id: str | None):
+    """Roda o `claude -p`, retomando `session_id` se houver. Devolve o proc
+    ou None em timeout."""
     cmd = [
         "claude", "-p", message,
         "--output-format", "json",
         "--model", MODEL,
         "--allowedTools", *ALLOWED_TOOLS,
     ]
+    if session_id:
+        cmd += ["--resume", session_id]
     try:
-        proc = subprocess.run(
+        return subprocess.run(
             cmd, cwd=PROJECT_DIR, capture_output=True, text=True,
             timeout=CLAUDE_TIMEOUT,
         )
     except subprocess.TimeoutExpired:
-        return "⏱️ O agente demorou demais e foi interrompido."
+        return None
 
+
+def ask_agent(message: str) -> str:
+    """Repassa a mensagem ao Claude headless, mantendo a sessão entre mensagens,
+    e devolve o texto da resposta."""
+    session_id = load_session()
+    proc = _run_claude(message, session_id)
+
+    # Resume de uma sessão velha/inválida falha -> recomeça do zero uma vez.
+    if session_id and proc is not None and proc.returncode != 0:
+        print("[session] resume falhou; iniciando sessão nova", flush=True)
+        clear_session()
+        proc = _run_claude(message, None)
+
+    if proc is None:
+        return "⏱️ O agente demorou demais e foi interrompido."
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout)[-500:]
         return f"⚠️ Erro ao chamar o agente:\n{detail}"
@@ -109,6 +147,9 @@ def ask_agent(message: str) -> str:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError:
         return proc.stdout.strip() or "⚠️ Resposta vazia do agente."
+
+    if data.get("session_id"):
+        save_session(data["session_id"])
 
     if data.get("is_error"):
         return f"⚠️ O agente retornou erro: {data.get('result', 'sem detalhe')}"
@@ -144,6 +185,11 @@ def main() -> None:
                 continue
             text = msg["text"]
             print(f"[msg] {text[:80]}", flush=True)
+            if text.strip().lower() in ("/novo", "/reset"):
+                clear_session()
+                send(chat_id, "🧹 Conversa reiniciada. A próxima mensagem "
+                              "começa do zero.")
+                continue
             try:
                 tg("sendChatAction", chat_id=chat_id, action="typing")
                 reply = ask_agent(text)
