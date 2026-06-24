@@ -15,3 +15,5 @@ vault/.obsidian/themes/
 # graph.json: display pessoal + cores de tag regeneradas pelo embed.py
 # (versioná-lo vazaria as tags do vault privado)
 vault/.obsidian/graph.json
+# community-plugins.json: Obsidian reescreve o formato e suja o git status
+vault/.obsidian/community-plugins.json
