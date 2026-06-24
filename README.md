@@ -1,4 +1,12 @@
-# Dennou 電脳
+```
+    ██████╗ ███████╗███╗   ██╗███╗   ██╗ ██████╗ ██╗   ██╗
+    ██╔══██╗██╔════╝████╗  ██║████╗  ██║██╔═══██╗██║   ██║
+    ██║  ██║█████╗  ██╔██╗ ██║██╔██╗ ██║██║   ██║██║   ██║
+    ██║  ██║██╔══╝  ██║╚██╗██║██║╚██╗██║██║   ██║██║   ██║
+    ██████╔╝███████╗██║ ╚████║██║ ╚████║╚██████╔╝╚██████╔╝
+    ╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝
+      電脳 · cérebro eletrônico · RAG sobre Zettelkasten
+
 
 Personal knowledge base with semantic search. Notes are stored as Markdown in an Obsidian vault and indexed in a local vector database for RAG-powered retrieval.
 
