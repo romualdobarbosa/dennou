@@ -20,8 +20,12 @@ Personal knowledge base with semantic search. Notes are stored as Markdown in an
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.12 .venv
+uv pip install -r requirements.txt
 ```
+
+> The deps (`torch` via `sentence-transformers`) lack wheels for very new Python
+> releases, so the venv pins 3.12. Run the scripts with `.venv/bin/python3`.
 
 Open `vault/` as an Obsidian vault.
 
@@ -39,13 +43,13 @@ The agent picks the right note type, fills the frontmatter, and indexes it autom
 
 ```bash
 # index a specific note
-python3 embed.py add vault/20260528210249-left-join-sql.md
+.venv/bin/python3 embed.py add vault/20260528210249-left-join-sql.md
 
 # semantic search
-python3 embed.py search "window functions"
+.venv/bin/python3 embed.py search "window functions"
 
 # reindex entire vault
-python3 embed.py sync
+.venv/bin/python3 embed.py sync
 ```
 
 ## Telegram bot

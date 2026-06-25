@@ -23,7 +23,7 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 
 > Aplica-se apenas ao **modo knowledge base**.
 
-- Antes de responder uma pergunta de conhecimento, consulte o vault com `python3 embed.py search "<pergunta>"` e use as notas retornadas como contexto adicional
+- Antes de responder uma pergunta de conhecimento, consulte o vault com `.venv/bin/python3 embed.py search "<pergunta>"` e use as notas retornadas como contexto adicional
 - Se encontrar notas relevantes (score ≥ 0.4), incorpore o conteúdo delas na resposta e mencione o título da nota ao final
 - Se o vault estiver vazio ou nenhuma nota for relevante, responda normalmente sem mencionar a busca
 - Só crie uma nota se o usuário pedir explicitamente (ex: "salva isso", "cria uma nota", "anota aí")
@@ -37,7 +37,7 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 4. Preencha o frontmatter completo — use tags existentes do `TAGS.md`; se precisar de uma tag nova, crie (ela será adicionada automaticamente pelo `embed.py add`)
 5. Use o template de body correspondente ao tipo
 6. Salve o arquivo em `vault/` com o nome no formato: `YYYYMMDDHHMMSS-titulo-slugificado.md`
-7. Execute o embedding: `python3 embed.py add vault/<nome-do-arquivo>.md`
+7. Execute o embedding: `.venv/bin/python3 embed.py add vault/<nome-do-arquivo>.md`
 8. Confirme para o usuário o nome do arquivo criado
 
 ## Frontmatter
@@ -79,7 +79,7 @@ related: [20260528143201, 20260528150000]
 
 **Usuário:** como funciona o LEFT JOIN no SQL?
 
-**Agente:** [roda `python3 embed.py search "LEFT JOIN SQL"`, encontra nota relevante, responde usando o conteúdo da nota como contexto, menciona a fonte ao final]
+**Agente:** [roda `.venv/bin/python3 embed.py search "LEFT JOIN SQL"`, encontra nota relevante, responde usando o conteúdo da nota como contexto, menciona a fonte ao final]
 
 **Usuário:** salva isso
 

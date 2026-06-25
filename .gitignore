@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 .bot_session
+.venv/
 
 # Notas pessoais — ficam só na máquina
 vault/*.md
