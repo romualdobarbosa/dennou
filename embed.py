@@ -3,6 +3,7 @@ Pipeline de embedding para o vault de notas.
 Insere ou atualiza uma nota no ChromaDB com base no seu frontmatter e body.
 """
 
+import argparse
 import os
 import re
 import sys
@@ -22,6 +23,13 @@ TAGS_MD = Path(os.environ.get("DENNOU_TAGS_FILE", ROOT / "TAGS.md"))
 # Config do Obsidian do próprio vault; se não existir, as cores não são sincronizadas.
 GRAPH_JSON = VAULT_DIR / ".obsidian" / "graph.json"
 COLLECTION_NAME = "dennou"
+# Formato do índice: um vetor por chunk de nota. Coleção sem essa marca é do
+# formato antigo (um vetor por nota) e é recriada pelo `embed.py sync`.
+INDEX_FORMAT = "chunks-v1"
+# Chunks de até 256 tokens (ou o max_seq_length do modelo, se for menor: 128 no
+# MiniLM), contando título e tokens especiais. É a config "minilm-chunk-title" do eval.
+CHUNK_MAX_TOKENS = 256
+CHUNK_WORD_OVERLAP = 0.2
 MODEL_NAME = os.environ.get("DENNOU_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 
 # Paleta de cores para novas tags (RGB decimal). Cores visualmente distintas.
@@ -72,13 +80,31 @@ def _get_model():
     return _model
 
 
-def open_collection(chroma_dir: str | Path, name: str = COLLECTION_NAME):
-    """Abre (ou cria) uma coleção persistente do Chroma com distância cosseno."""
-    client = chromadb.PersistentClient(
+def _client(chroma_dir: str | Path):
+    return chromadb.PersistentClient(
         path=str(chroma_dir),
         settings=Settings(anonymized_telemetry=False),
     )
-    return client.get_or_create_collection(name=name, metadata={"hnsw:space": "cosine"})
+
+
+def _collection_metadata() -> dict:
+    return {"hnsw:space": "cosine", "dennou_index": INDEX_FORMAT}
+
+
+def is_current_format(collection) -> bool:
+    """A coleção foi criada no formato atual (chunks)? Senão, precisa de `sync`."""
+    return (collection.metadata or {}).get("dennou_index") == INDEX_FORMAT
+
+
+def open_collection(chroma_dir: str | Path, name: str = COLLECTION_NAME):
+    """Abre (ou cria) uma coleção persistente do Chroma com distância cosseno."""
+    client = _client(chroma_dir)
+    collection = client.get_or_create_collection(name=name, metadata=_collection_metadata())
+    if not is_current_format(collection) and collection.count() == 0:
+        # Coleção vazia criada por uma versão antiga: recria já com a marca do formato.
+        client.delete_collection(name)
+        collection = client.create_collection(name=name, metadata=_collection_metadata())
+    return collection
 
 
 def _get_collection():
@@ -89,7 +115,7 @@ def _get_collection():
 
 
 def note_text(note: dict, include_title: bool = True) -> str:
-    """Texto que vai pro embedding de uma nota: título + corpo (ou só o corpo)."""
+    """Texto da nota inteira: título + corpo (ou só o corpo)."""
     if include_title:
         return f"{note['title']}\n\n{note['body']}"
     return note["body"]
@@ -98,6 +124,136 @@ def note_text(note: dict, include_title: bool = True) -> str:
 def distance_to_score(distance: float) -> float:
     """Converte a distância cosseno do Chroma no score mostrado na busca."""
     return round(1 - distance, 4)
+
+
+# --------------------------------------------------------------------------- chunking
+
+
+def count_tokens(model: SentenceTransformer, text: str) -> int:
+    """Tokens que o modelo veria, com os especiais e sem truncar."""
+    encoded = model.tokenizer(text, add_special_tokens=True, truncation=False, verbose=False)
+    return len(encoded["input_ids"])
+
+
+def split_paragraphs(body: str) -> list[str]:
+    """Separa por linha em branco, sem quebrar blocos de código cercados por ```."""
+    paragraphs, current, in_fence = [], [], False
+    for line in body.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        if not line.strip() and not in_fence:
+            if current:
+                paragraphs.append("\n".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        paragraphs.append("\n".join(current))
+    return paragraphs
+
+
+def chunk_body(body: str, fits) -> list[str]:
+    """
+    Agrupa parágrafos consecutivos enquanto o chunk couber (fits(texto) -> bool).
+    Parágrafo que sozinho não cabe vira janelas de palavras com sobreposição
+    de CHUNK_WORD_OVERLAP.
+    """
+    chunks, current = [], ""
+    for para in split_paragraphs(body):
+        candidate = f"{current}\n\n{para}" if current else para
+        if fits(candidate):
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+            current = ""
+        if fits(para):
+            current = para
+            continue
+        words, start = para.split(" "), 0
+        while start < len(words):
+            end = start + 1
+            while end < len(words) and fits(" ".join(words[start : end + 1])):
+                end += 1
+            chunks.append(" ".join(words[start:end]))
+            if end >= len(words):
+                break
+            start = max(start + 1, end - int((end - start) * CHUNK_WORD_OVERLAP))
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def note_chunks(
+    note: dict,
+    model: SentenceTransformer,
+    include_title: bool = True,
+    passage_prefix: str = "",
+    max_tokens: int = CHUNK_MAX_TOKENS,
+) -> list[str]:
+    """
+    Textos que vão pro embedding de uma nota: o corpo em chunks de até
+    min(max_tokens, max_seq_length do modelo) tokens, cada um com o prefixo e
+    o título na frente (contados no limite, então nenhum chunk é truncado).
+    É a mesma função que o eval usa.
+    """
+    head = passage_prefix + (f"{note['title']}\n\n" if include_title else "")
+    limit = min(max_tokens, model.max_seq_length)
+    chunks = chunk_body(note["body"], lambda text: count_tokens(model, head + text) <= limit)
+    if not chunks:  # corpo vazio: indexa só o título
+        return [(passage_prefix + note_text(note, include_title)).strip()]
+    return [head + chunk for chunk in chunks]
+
+
+def index_note(collection, model: SentenceTransformer, note: dict, texts=None) -> int:
+    """
+    Grava os chunks de uma nota (ids "<note_id>#<n>", metadado note_id) e apaga
+    os que ela tinha antes, inclusive o vetor único do formato antigo. Assim
+    reindexar não duplica e nota que encolheu não deixa chunk órfão.
+    Retorna quantos chunks foram gravados.
+    """
+    if texts is None:
+        texts = note_chunks(note, model)
+    embeddings = model.encode(texts)  # antes de apagar: se falhar, o índice fica como estava
+
+    collection.delete(where={"note_id": note["id"]})
+    collection.delete(ids=[note["id"]])
+
+    base = {
+        "note_id": note["id"],
+        "title": note["title"],
+        "type": note["type"],
+        "area": note["area"],
+        "created": note["created"],
+        "filename": note["filename"],
+    }
+    if note["tags"]:  # o Chroma não aceita lista vazia como metadado
+        base["tags"] = note["tags"]
+    collection.add(
+        ids=[f"{note['id']}#{i}" for i in range(len(texts))],
+        embeddings=[e.tolist() for e in embeddings],
+        documents=texts,
+        metadatas=[{**base, "chunk": i} for i in range(len(texts))],
+    )
+    return len(texts)
+
+
+def best_chunk_per_note(results: dict) -> list[dict]:
+    """
+    Junta o resultado de um `collection.query` por nota: score da nota = maior
+    score entre os chunks dela; cada nota aparece uma vez, em ordem de score.
+    Entrada sem note_id (formato antigo) conta como nota pelo próprio id.
+    """
+    ids, metas, dists = results["ids"][0], results["metadatas"][0], results["distances"][0]
+    docs = (results.get("documents") or [None])[0] or [None] * len(ids)
+    best: dict[str, dict] = {}
+    for chunk_id, meta, dist, doc in zip(ids, metas, dists, docs, strict=True):
+        meta = meta or {}
+        note_id = meta.get("note_id") or chunk_id
+        score = distance_to_score(dist)
+        if note_id not in best or score > best[note_id]["score"]:
+            best[note_id] = {"note_id": note_id, "score": score, "metadata": meta, "document": doc}
+    return sorted(best.values(), key=lambda h: (-h["score"], h["note_id"]))
 
 
 def _unquote(value: str) -> str:
@@ -242,7 +398,7 @@ def sync_tags() -> None:
 
 def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
     """
-    Insere ou atualiza uma nota no ChromaDB.
+    Insere ou atualiza uma nota no ChromaDB (todos os chunks dela).
     Com sync_metadata, atualiza também as cores do graph.json e o TAGS.md
     (o sync_vault desliga e atualiza uma vez só no fim).
     Retorna o ID da nota embedada.
@@ -252,27 +408,7 @@ def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
     if note is None:
         raise ValueError(f"Nota inválida ou sem frontmatter: {path}")
 
-    text_to_embed = note_text(note)
-
-    model = _get_model()
-    embedding = model.encode(text_to_embed).tolist()
-
-    collection = _get_collection()
-    collection.upsert(
-        ids=[note["id"]],
-        embeddings=[embedding],
-        documents=[text_to_embed],
-        metadatas=[
-            {
-                "title": note["title"],
-                "type": note["type"],
-                "tags": ", ".join(note["tags"]),
-                "area": note["area"],
-                "created": note["created"],
-                "filename": note["filename"],
-            }
-        ],
-    )
+    index_note(_get_collection(), _get_model(), note)
 
     if sync_metadata:
         sync_graph_colors()
@@ -280,92 +416,140 @@ def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
     return note["id"]
 
 
-def search(query: str, n_results: int = 5, filter_type: str = None) -> list[dict]:
-    """
-    Busca semântica no vault.
-    Retorna lista de dicts com id, title, filename, score e trecho do body.
-    """
-    model = _get_model()
-    query_embedding = model.encode(query).tolist()
+def _excerpt(document: str | None, title: str, size: int = 300) -> str:
+    """Trecho do chunk que casou, sem o título que vai na frente de todo chunk."""
+    text = document or ""
+    if title and text.startswith(f"{title}\n\n"):
+        text = text[len(title) + 2 :]
+    return text[:size]
 
+
+def search(query: str, n_results: int = 5, filter_type: str | None = None) -> list[dict]:
+    """
+    Busca semântica no vault. Uma entrada por nota (o chunk de maior score),
+    em ordem de score: dicts com id, title, filename, type, score e excerpt
+    (trecho do chunk que casou).
+    """
     collection = _get_collection()
+    total = collection.count()
+    if total == 0:
+        return []
+
+    query_embedding = _get_model().encode(query).tolist()
     where = {"type": filter_type} if filter_type else None
 
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results,
-        where=where,
-        include=["documents", "metadatas", "distances"],
-    )
+    # Vários chunks podem ser da mesma nota: pede mais itens que notas e
+    # dobra enquanto faltar nota distinta e ainda houver item no índice.
+    fetch = min(total, max(n_results * 10, 50))
+    while True:
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=fetch,
+            where=where,
+            include=["documents", "metadatas", "distances"],
+        )
+        hits = best_chunk_per_note(results)
+        returned = len(results["ids"][0])
+        if len(hits) >= n_results or returned < fetch or fetch >= total:
+            break
+        fetch = min(total, fetch * 2)
 
     output = []
-    for i in range(len(results["ids"][0])):
+    for hit in hits[:n_results]:
+        meta = hit["metadata"]
         output.append(
             {
-                "id": results["ids"][0][i],
-                "title": results["metadatas"][0][i]["title"],
-                "filename": results["metadatas"][0][i]["filename"],
-                "type": results["metadatas"][0][i]["type"],
-                "score": distance_to_score(results["distances"][0][i]),
-                "excerpt": results["documents"][0][i][:200],
+                "id": hit["note_id"],
+                "title": meta.get("title", ""),
+                "filename": meta.get("filename", ""),
+                "type": meta.get("type", ""),
+                "score": hit["score"],
+                "excerpt": _excerpt(hit["document"], meta.get("title", "")),
             }
         )
-
     return output
 
 
 def sync_vault():
-    """Embeds todas as notas do vault (útil para reindexar tudo)."""
-    notes = [p for p in VAULT_DIR.glob("*.md") if p.name != "Home.md"]
+    """
+    Reindexa o vault inteiro do zero: monta uma coleção nova e só no fim troca
+    pela atual. Assim não sobra vetor de nota apagada nem do formato antigo.
+    """
+    global _collection
+    notes = sorted(p for p in VAULT_DIR.glob("*.md") if p.name != "Home.md")
     if not notes:
         print("Nenhuma nota encontrada no vault.")
         return
 
+    client = _client(CHROMA_DIR)
+    existing = {c.name for c in client.list_collections()}
+    staging = f"{COLLECTION_NAME}-rebuild"
+    if staging in existing:  # sobra de um sync interrompido
+        client.delete_collection(staging)
+    collection = client.create_collection(name=staging, metadata=_collection_metadata())
+
+    model = _get_model()
     for path in notes:
-        try:
-            note_id = embed_note(path, sync_metadata=False)
-            print(f"  embedado: {path.name} ({note_id})")
-        except ValueError as e:
-            print(f"  pulado: {e}")
+        note = parse_note(path)
+        if note is None:
+            print(f"  pulado: Nota inválida ou sem frontmatter: {path}")
+            continue
+        n_chunks = index_note(collection, model, note)
+        print(f"  embedado: {path.name} ({note['id']}, {n_chunks} chunk(s))")
+
+    if COLLECTION_NAME in existing:
+        client.delete_collection(COLLECTION_NAME)
+    collection.modify(name=COLLECTION_NAME)
+    _collection = collection
 
     sync_graph_colors()
     sync_tags()
     print(f"\n{len(notes)} nota(s) processada(s).")
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python embed.py <comando> [args]")
-        print("  sync                  — reindexar todo o vault")
-        print("  tags                  — regenerar TAGS.md")
-        print("  add <caminho>         — embedar uma nota específica")
-        print("  search <query>        — busca semântica")
-        sys.exit(1)
+def _warn_if_old_format() -> None:
+    collection = _get_collection()
+    if not is_current_format(collection):
+        print(
+            "aviso: o índice está no formato antigo (um vetor por nota). "
+            "Rode `embed.py sync` pra reindexar em chunks.",
+            file=sys.stderr,
+        )
 
-    cmd = sys.argv[1]
 
-    if cmd == "sync":
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="embed.py", description="Índice e busca do vault.")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("sync", help="reindexar todo o vault do zero")
+    sub.add_parser("tags", help="regenerar TAGS.md")
+    p_add = sub.add_parser("add", help="embedar uma nota específica")
+    p_add.add_argument("path")
+    p_search = sub.add_parser("search", help="busca semântica")
+    p_search.add_argument("query", nargs="+")
+    p_search.add_argument("--type", dest="filter_type", help="só notas desse type")
+    p_search.add_argument("-k", type=int, default=5, help="quantas notas (default 5)")
+    args = parser.parse_args(argv)
+
+    if args.cmd == "sync":
         sync_vault()
-
-    elif cmd == "tags":
+    elif args.cmd == "tags":
         sync_tags()
         print("TAGS.md atualizado.")
-
-    elif cmd == "add" and len(sys.argv) == 3:
-        note_id = embed_note(sys.argv[2])
+    elif args.cmd == "add":
+        _warn_if_old_format()
+        note_id = embed_note(args.path)
         print(f"Nota embedada com id: {note_id}")
-
-    elif cmd == "search" and len(sys.argv) >= 3:
-        query = " ".join(sys.argv[2:])
-        results = search(query)
+    elif args.cmd == "search":
+        _warn_if_old_format()
+        results = search(" ".join(args.query), n_results=args.k, filter_type=args.filter_type)
         if not results:
             print("Nenhum resultado encontrado.")
-        else:
-            for r in results:
-                print(f"[{r['score']}] {r['title']} ({r['type']}) — {r['filename']}")
-                print(f"  {r['excerpt'][:120]}...")
-                print()
+        for r in results:
+            print(f"[{r['score']}] {r['title']} ({r['type']}) — {r['filename']}")
+            print(f"  {' '.join(r['excerpt'].split())[:200]}...")
+            print()
+    return 0
 
-    else:
-        print(f"Comando desconhecido: {cmd}")
-        sys.exit(1)
+
+if __name__ == "__main__":
+    sys.exit(main())

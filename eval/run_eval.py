@@ -7,8 +7,9 @@ Uso (da raiz do repo):
 
 Cada config indexa eval/vault num Chroma temporário (cosseno, igual à produção)
 e roda as perguntas de eval/queries.jsonl. A config de produção
-(minilm-whole-title) usa as mesmas funções do embed.py: mesmo parse da nota,
-mesmo texto (título + corpo), mesmo modelo e mesma conversão distância -> score.
+(minilm-chunk-title) usa as mesmas funções do embed.py: mesmo parse da nota,
+mesmo chunking (embed.note_chunks), mesma gravação no Chroma (embed.index_note),
+mesmo modelo e mesma junção dos chunks por nota (embed.best_chunk_per_note).
 """
 
 import argparse
@@ -48,14 +49,8 @@ MODELS = {
     },
     "bge-m3": {"name": "BAAI/bge-m3", "query_prefix": "", "passage_prefix": ""},
 }
-PRODUCTION_CONFIG = "minilm-whole-title"
-
-# Chunks de até 256 tokens (ou o max_seq_length do modelo, se for menor),
-# contando prefixo, título e tokens especiais. Assim nenhum chunk é truncado
-# e o tamanho do chunk é o mesmo pros modelos que aceitam mais.
-CHUNK_MAX_TOKENS = 256
-# Sobreposição (em fração de palavras) só quando um parágrafo sozinho não cabe.
-WORD_OVERLAP = 0.2
+# Config que o embed.py usa em produção (mesmo modelo, chunking e título).
+PRODUCTION_CONFIG = "minilm-chunk-title"
 
 TOP_K = 5
 MRR_DEPTH = 10
@@ -116,57 +111,6 @@ def parse_config(name: str) -> dict:
     if model not in MODELS or rest not in ("title", "notitle"):
         raise ValueError(f"config desconhecida: {name} (use uma de {all_configs()})")
     return {"name": name, "model": model, "chunking": mode, "include_title": rest == "title"}
-
-
-# --------------------------------------------------------------------------- chunking
-
-
-def split_paragraphs(body: str) -> list[str]:
-    """Separa por linha em branco, sem quebrar blocos de código cercados por ```."""
-    paragraphs, current, in_fence = [], [], False
-    for line in body.splitlines():
-        if line.strip().startswith("```"):
-            in_fence = not in_fence
-        if not line.strip() and not in_fence:
-            if current:
-                paragraphs.append("\n".join(current))
-                current = []
-            continue
-        current.append(line)
-    if current:
-        paragraphs.append("\n".join(current))
-    return paragraphs
-
-
-def chunk_body(body: str, fits) -> list[str]:
-    """
-    Agrupa parágrafos consecutivos enquanto o chunk couber (fits(texto) -> bool).
-    Parágrafo que sozinho não cabe vira janelas de palavras com sobreposição.
-    """
-    chunks, current = [], ""
-    for para in split_paragraphs(body):
-        candidate = f"{current}\n\n{para}" if current else para
-        if fits(candidate):
-            current = candidate
-            continue
-        if current:
-            chunks.append(current)
-            current = ""
-        if fits(para):
-            current = para
-            continue
-        words, start = para.split(" "), 0
-        while start < len(words):
-            end = start + 1
-            while end < len(words) and fits(" ".join(words[start : end + 1])):
-                end += 1
-            chunks.append(" ".join(words[start:end]))
-            if end >= len(words):
-                break
-            start = max(start + 1, end - int((end - start) * WORD_OVERLAP))
-    if current:
-        chunks.append(current)
-    return chunks
 
 
 # --------------------------------------------------------------------------- execução
@@ -240,39 +184,27 @@ def run_config(config: dict, notes, queries, manifest, device: str, model_cache:
     model = model_cache[spec["name"]]
     model_load_s = time.perf_counter() - t0
     max_seq = model.max_seq_length
-    tok = model.tokenizer
 
-    def n_tokens(text: str) -> int:
-        return len(tok(text, add_special_tokens=True, truncation=False)["input_ids"])
-
-    chunk_limit = min(CHUNK_MAX_TOKENS, max_seq)
+    chunk_limit = min(embed.CHUNK_MAX_TOKENS, max_seq)
     texts_by_note = {}
     truncated = []
     for note in notes:
         full = spec["passage_prefix"] + embed.note_text(note, config["include_title"])
-        if n_tokens(full) > max_seq:
+        if embed.count_tokens(model, full) > max_seq:
             truncated.append(note["id"])
         if config["chunking"] == "whole":
             texts_by_note[note["id"]] = [full]
         else:
-            head = spec["passage_prefix"]
-            if config["include_title"]:
-                head += f"{note['title']}\n\n"
-            chunks = chunk_body(note["body"], lambda t, h=head: n_tokens(h + t) <= chunk_limit)
-            texts_by_note[note["id"]] = [head + c for c in chunks]
+            # Mesma função do embed.py: o chunking do eval é o de produção.
+            texts_by_note[note["id"]] = embed.note_chunks(
+                note, model, config["include_title"], spec["passage_prefix"]
+            )
 
     with tempfile.TemporaryDirectory(prefix="dennou-eval-") as tmp:
         collection = embed.open_collection(tmp, name="eval")
         t0 = time.perf_counter()
         for note in notes:
-            texts = texts_by_note[note["id"]]
-            embs = model.encode(texts)
-            collection.upsert(
-                ids=[f"{note['id']}#{i}" for i in range(len(texts))],
-                embeddings=[e.tolist() for e in embs],
-                documents=texts,
-                metadatas=[{"note_id": note["id"]} for _ in texts],
-            )
+            embed.index_note(collection, model, note, texts_by_note[note["id"]])
         index_s = time.perf_counter() - t0
         n_items = collection.count()
 
@@ -291,12 +223,9 @@ def run_config(config: dict, notes, queries, manifest, device: str, model_cache:
             res = collection.query(
                 query_embeddings=[q_emb], n_results=n_items, include=["distances", "metadatas"]
             )
-            scores = {}
-            for meta, dist in zip(res["metadatas"][0], res["distances"][0], strict=True):
-                s = embed.distance_to_score(dist)
-                nid = meta["note_id"]
-                scores[nid] = max(s, scores.get(nid, -1.0))
-            ranked = sorted(scores, key=lambda n: (-scores[n], n))
+            hits = embed.best_chunk_per_note(res)
+            scores = {h["note_id"]: h["score"] for h in hits}
+            ranked = [h["note_id"] for h in hits]
             per_query.append({"query": q, "ranked": ranked, "scores": scores})
 
     result = summarize(config, per_query, manifest, latencies)
@@ -311,7 +240,7 @@ def run_config(config: dict, notes, queries, manifest, device: str, model_cache:
         "chunking": {
             "mode": config["chunking"],
             "max_tokens": chunk_limit if config["chunking"] == "chunk" else None,
-            "word_overlap": WORD_OVERLAP if config["chunking"] == "chunk" else None,
+            "word_overlap": embed.CHUNK_WORD_OVERLAP if config["chunking"] == "chunk" else None,
             "items_indexed": n_items,
         },
         "notes": len(notes),
@@ -595,7 +524,8 @@ def main() -> int:
     if related is None and (args.out / "related_expansion.json").exists():
         related = json.loads((args.out / "related_expansion.json").read_text(encoding="utf-8"))
     write_summary(all_results, related, args.out / "summary.md")
-    print(f"resultados em {args.out.relative_to(ROOT) if args.out.is_absolute() else args.out}")
+    out = args.out.resolve()
+    print(f"resultados em {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
     return 0
 
 
