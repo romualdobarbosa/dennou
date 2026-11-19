@@ -158,6 +158,10 @@ Nothing in the old code looked wrong. Notes were embedded whole, search returned
 
 The bot runs `claude -p` with `--allowedTools`, and a headless agent can't ask for permission, so anything off the list is denied. The list had `Bash(python3 embed.py:*)`, while `CLAUDE.md` tells the agent to run `.venv/bin/python3 embed.py search ...`. The rule matches by prefix, so the search was denied and the agent answered from general knowledge, as if the vault had nothing on the subject. I reproduced it with `claude -p` on a clean clone (denied before the fix, allowed and answered from the note after) and fixed the rule ([`8bae299`](https://github.com/romualdobarbosa/dennou/commit/8bae299)).
 
+### The file tools had no path limit
+
+The same list also let `Read`, `Write`, `Edit`, `Glob` and `Grep` run with no path pattern. I tested it on a clone with a fake token, and the headless agent read `.env`, read and wrote a file outside the repo and edited the README without a single denial. Now the session only gets `Bash`, `Read`, `Edit` and `Write`, it can write only inside `vault/`, and `.env` and `.bot_session` are denied. I ran the same prompts again and all of them were denied, while reading, creating and editing notes in the vault kept working.
+
 ## Limitations
 
 - The eval is small and synthetic, written by the same person (plus an agent) who wrote the notes. See the caveats above.
@@ -165,7 +169,7 @@ The bot runs `claude -p` with `--allowedTools`, and a headless agent can't ask f
 - No hybrid search (BM25) and no reranking yet.
 - There is no GIF or recorded demo of the Telegram bot.
 - Notes created from the phone in Obsidian only get indexed when `embed.py add` (or `sync`) runs on the PC.
-- The file tools in `ALLOWED_TOOLS` (`Read`, `Write`, `Edit`, `Glob`, `Grep`) have no path pattern, so the list itself doesn't keep the agent inside `vault/`. `CLAUDE.md` and the owner lock do that job.
+- The bot's agent can still read any file inside the repo that isn't a secret, because Claude Code allows reads in the working directory by default. Only `.env` and `.bot_session` are denied.
 - On the five demo notes, "como criar uma branch no git" still puts `git commit` first and `git branch` second (output below). The eval measures 80 notes, not this case.
 
 ## How to run
@@ -218,7 +222,7 @@ The bot forwards your message to the Claude Code agent in headless mode (`claude
 - Long polling with the standard library, so there is no public URL or webhook and it works behind a home router.
 - It runs on the PC, so notes are saved locally.
 - It only answers your `chat_id`, since it writes files and runs `embed.py` on the machine.
-- The only shell command the headless agent may run is `.venv/bin/python3 embed.py` (`ALLOWED_TOOLS` in [`bot.py`](bot.py)).
+- The only shell command the headless agent may run is `.venv/bin/python3 embed.py`, it can only write inside `vault/`, and it can't read `.env` or anything outside the repo (`TOOLS`, `ALLOWED_TOOLS` and `DISALLOWED_TOOLS` in [`bot.py`](bot.py)).
 - It keeps the conversation between messages (the session id lives in `.bot_session`), so "salva isso" sees the previous answer. `/novo` or `/reset` starts over.
 
 To create your own bot:
@@ -251,7 +255,7 @@ journalctl --user -u dennou-bot -f      # logs
 
 The bot runs `claude -p` on the host machine with the owner's Claude authentication (the Claude Code login or API key on that machine). The Telegram user does not attach their own Claude account, and the API has no idea who is on the other end of the chat.
 
-So whoever talks to the bot spends the owner's Claude plan and writes to the owner's vault, on the owner's machine. That is why the `TELEGRAM_OWNER_ID` lock exists. Without it, anyone who found the bot's username could burn your credits and touch your files (even with `ALLOWED_TOOLS` restricted, they could still read and write files).
+So whoever talks to the bot spends the owner's Claude plan and writes to the owner's vault, on the owner's machine. That is why the `TELEGRAM_OWNER_ID` lock exists. Without it, anyone who found the bot's username could burn your credits and touch your files (even with the tool rules, they could still read the repo and write to the vault).
 
 There is no shared dennou bot. If someone else wants one, they run their own instance on their own machine, with their own Telegram token, their own `TELEGRAM_OWNER_ID` and their own Claude authentication. One instance per person and machine.
 
