@@ -28,8 +28,9 @@ demo:
 	$(DEMO_ENV) uv run python embed.py search "como criar uma branch no git"
 
 # Eval de retrieval no vault sintético de eval/vault (não toca no vault real).
-# eval: as 12 configs (3 modelos x nota inteira/chunks x com/sem título) e o
-# experimento do related; grava eval/results/. Baixa e5-small e bge-m3 (~2.5 GB).
+# eval: as 12 configs (3 modelos x nota inteira/chunks x com/sem título) e os
+# experimentos do related e da seção ## Links; grava eval/results/. Baixa e5-small e
+# bge-m3 (~2.5 GB).
 eval:
 	uv run python -m eval.run_eval
 
