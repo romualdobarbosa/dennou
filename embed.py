@@ -33,6 +33,9 @@ INDEX_FORMAT = "chunks-v1"
 # MiniLM), contando título e tokens especiais. É a config "minilm-chunk-title" do eval.
 CHUNK_MAX_TOKENS = 256
 CHUNK_WORD_OVERLAP = 0.2
+# A seção `## Links` (wiki-links do Obsidian) fica fora do texto embedado.
+# Experimento "links" do eval (eval/results/links_section.json).
+KEEP_LINKS_SECTION = False
 # Score mínimo pra uma nota contar como relevante (o agente ignora as de baixo).
 # 0.55 é o sugerido pelo eval pra config de produção: 10% de falso positivo
 # nas perguntas sem resposta. Mudou o modelo ou o chunking, rode `make eval`.
@@ -126,11 +129,40 @@ def _get_collection():
     return _collection
 
 
-def note_text(note: dict, include_title: bool = True) -> str:
+_LINKS_HEADING = re.compile(r"^##[ \t]+Links[ \t]*$", re.IGNORECASE)
+
+
+def strip_links_section(body: str) -> str:
+    """
+    Tira a seção `## Links` do corpo (do título dela até o próximo `#`/`##` ou o
+    fim). São wiki-links de navegação do Obsidian, não conteúdo: embedados,
+    viram um chunk só de nomes de outras notas e puxam falso positivo.
+    """
+    out, skipping, in_fence = [], False, False
+    for line in body.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        if not in_fence and _LINKS_HEADING.match(line.strip()):
+            skipping = True
+            continue
+        if skipping and not in_fence and re.match(r"^#{1,2}\s", line):
+            skipping = False
+        if not skipping:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
+def embed_body(note: dict, keep_links: bool = KEEP_LINKS_SECTION) -> str:
+    """Corpo que vai pro embedding (sem a seção `## Links`, por padrão)."""
+    return note["body"] if keep_links else strip_links_section(note["body"])
+
+
+def note_text(note: dict, include_title: bool = True, keep_links: bool = KEEP_LINKS_SECTION) -> str:
     """Texto da nota inteira: título + corpo (ou só o corpo)."""
+    body = embed_body(note, keep_links)
     if include_title:
-        return f"{note['title']}\n\n{note['body']}"
-    return note["body"]
+        return f"{note['title']}\n\n{body}"
+    return body
 
 
 def distance_to_score(distance: float) -> float:
@@ -202,6 +234,7 @@ def note_chunks(
     include_title: bool = True,
     passage_prefix: str = "",
     max_tokens: int = CHUNK_MAX_TOKENS,
+    keep_links: bool = KEEP_LINKS_SECTION,
 ) -> list[str]:
     """
     Textos que vão pro embedding de uma nota: o corpo em chunks de até
@@ -211,9 +244,10 @@ def note_chunks(
     """
     head = passage_prefix + (f"{note['title']}\n\n" if include_title else "")
     limit = min(max_tokens, model.max_seq_length)
-    chunks = chunk_body(note["body"], lambda text: count_tokens(model, head + text) <= limit)
+    body = embed_body(note, keep_links)
+    chunks = chunk_body(body, lambda text: count_tokens(model, head + text) <= limit)
     if not chunks:  # corpo vazio: indexa só o título
-        return [(passage_prefix + note_text(note, include_title)).strip()]
+        return [(passage_prefix + note_text(note, include_title, keep_links)).strip()]
     return [head + chunk for chunk in chunks]
 
 
