@@ -24,7 +24,7 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 > Aplica-se apenas ao **modo knowledge base**.
 
 - Antes de responder uma pergunta de conhecimento, consulte o vault com `.venv/bin/python3 embed.py search "<pergunta>"` e use as notas retornadas como contexto adicional
-- Se encontrar notas relevantes (score ≥ 0.4), incorpore o conteúdo delas na resposta e mencione o título da nota ao final
+- Se encontrar notas relevantes (score ≥ 0.55), incorpore o conteúdo delas na resposta e mencione o título da nota ao final. O search mostra sempre as 5 melhores e marca com "(abaixo do corte 0.55)" as que não passam; ignore essas
 - Se o vault estiver vazio ou nenhuma nota for relevante, responda normalmente sem mencionar a busca
 - Só crie uma nota se o usuário pedir explicitamente (ex: "salva isso", "cria uma nota", "anota aí")
 - Ao criar uma nota, leia o `SCHEMA.md` e o `TAGS.md` para seguir a estrutura correta
@@ -49,13 +49,13 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 - `area`: categoria ampla — `programacao | ciencia-da-computacao | cotidiano | filosofia | misc`
 - `created`: data no formato `DD/MM/YY`
 - `source`: `agent` (você criou) ou `manual` (usuário criou)
-- `related`: lista de ids de notas relacionadas — busque por similaridade semântica nas notas existentes
+- `related`: lista de ids de notas relacionadas — use as notas que o search retornou acima do corte
 
 ## Campos de relacionamento
 
 Use os resultados do `embed.py search` (já executado antes de responder) para identificar notas com tema similar. Não é necessário ler arquivos do vault nem listar o diretório.
 
-- `related` (frontmatter): adicione os **IDs** (timestamps) das notas com score ≥ 0.4 retornadas pelo search — usado pelo RAG
+- `related` (frontmatter): adicione os **IDs** (timestamps) das notas com score ≥ 0.55 retornadas pelo search. Ele registra notas próximas (navegação e gabarito do eval); a busca não usa esse campo
 - `## Links` (body): adicione `[[nome-do-arquivo-sem-extensao]]` para cada nota relacionada — alimenta o grafo do Obsidian
 
 Exemplo:

@@ -30,6 +30,11 @@ INDEX_FORMAT = "chunks-v1"
 # MiniLM), contando título e tokens especiais. É a config "minilm-chunk-title" do eval.
 CHUNK_MAX_TOKENS = 256
 CHUNK_WORD_OVERLAP = 0.2
+# Score mínimo pra uma nota contar como relevante (o agente ignora as de baixo).
+# 0.55 é o sugerido pelo eval pra config de produção: 10% de falso positivo
+# nas perguntas sem resposta. Mudou o modelo ou o chunking, rode `make eval`.
+DEFAULT_SCORE_THRESHOLD = 0.55
+SCORE_THRESHOLD = float(os.environ.get("DENNOU_SCORE_THRESHOLD") or DEFAULT_SCORE_THRESHOLD)
 MODEL_NAME = os.environ.get("DENNOU_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 
 # Paleta de cores para novas tags (RGB decimal). Cores visualmente distintas.
@@ -427,8 +432,8 @@ def _excerpt(document: str | None, title: str, size: int = 300) -> str:
 def search(query: str, n_results: int = 5, filter_type: str | None = None) -> list[dict]:
     """
     Busca semântica no vault. Uma entrada por nota (o chunk de maior score),
-    em ordem de score: dicts com id, title, filename, type, score e excerpt
-    (trecho do chunk que casou).
+    em ordem de score: dicts com id, title, filename, type, score, excerpt
+    (trecho do chunk que casou) e relevant (score >= SCORE_THRESHOLD).
     """
     collection = _get_collection()
     total = collection.count()
@@ -465,6 +470,7 @@ def search(query: str, n_results: int = 5, filter_type: str | None = None) -> li
                 "type": meta.get("type", ""),
                 "score": hit["score"],
                 "excerpt": _excerpt(hit["document"], meta.get("title", "")),
+                "relevant": hit["score"] >= SCORE_THRESHOLD,
             }
         )
     return output
@@ -545,7 +551,8 @@ def main(argv: list[str] | None = None) -> int:
         if not results:
             print("Nenhum resultado encontrado.")
         for r in results:
-            print(f"[{r['score']}] {r['title']} ({r['type']}) — {r['filename']}")
+            below = "" if r["relevant"] else f"  (abaixo do corte {SCORE_THRESHOLD})"
+            print(f"[{r['score']}] {r['title']} ({r['type']}) — {r['filename']}{below}")
             print(f"  {' '.join(r['excerpt'].split())[:200]}...")
             print()
     return 0

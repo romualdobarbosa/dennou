@@ -55,7 +55,7 @@ PRODUCTION_CONFIG = "minilm-chunk-title"
 TOP_K = 5
 MRR_DEPTH = 10
 THRESHOLDS = [round(i * 0.05, 2) for i in range(21)]
-PRODUCTION_THRESHOLD = 0.4
+PRODUCTION_THRESHOLD = embed.SCORE_THRESHOLD  # DENNOU_SCORE_THRESHOLD, default 0.55
 MAX_FP_RATE = 0.10
 
 # Subconjunto fixo do eval-quick (gate do CI): perguntas com resposta, de todos
@@ -292,7 +292,7 @@ def summarize(config, per_query, manifest, latencies) -> dict:
         for kind in ("literal", "paraphrase", "cross_lingual")
     }
     curve = m.threshold_curve(answerable, no_answer, THRESHOLDS, k=TOP_K)
-    at_prod = next(c for c in curve if c["threshold"] == PRODUCTION_THRESHOLD)
+    at_prod = m.threshold_curve(answerable, no_answer, [PRODUCTION_THRESHOLD], k=TOP_K)[0]
     return {
         "metrics": {
             "overall": aggregate(rows),
@@ -302,6 +302,7 @@ def summarize(config, per_query, manifest, latencies) -> dict:
         },
         "threshold": {
             "curve": curve,
+            "production_threshold": PRODUCTION_THRESHOLD,
             "at_production": at_prod,
             "suggested": m.suggest_threshold(curve, MAX_FP_RATE),
             "criterion": f"maior Recall@5 (só notas com score >= t) com FP <= {MAX_FP_RATE:.0%}",
@@ -370,17 +371,20 @@ def write_summary(results: dict[str, dict], related: dict | None, path: Path) ->
     names = [n for n in all_configs() if n in results]
     first = results[names[0]]["meta"]
     env = first["env"]
+    t_prod = f"{PRODUCTION_THRESHOLD:g}"
     lines = [
         "# Resultados do eval de retrieval",
         "",
         f"Gerado por `make eval` em {env['date'][:10]} (commit `{env['commit']}`), "
         f"device `{env['device']}` ({env['cpu']}, {env['torch_threads']} threads, "
         f"torch {env['torch']}). Vault sintético de `eval/vault` (80 notas), 60 perguntas "
-        f"(50 com resposta, 10 sem). `{PRODUCTION_CONFIG}` é a config de produção.",
+        f"(50 com resposta, 10 sem). A config de produção (a que o `embed.py` usa) é "
+        f"**`{PRODUCTION_CONFIG}`**, em negrito nas tabelas, com corte em "
+        f"{PRODUCTION_THRESHOLD} (`DENNOU_SCORE_THRESHOLD`).",
         "",
         "## Geral (50 perguntas com resposta)",
         "",
-        "| config | R@1 | R@3 | R@5 | MRR | nDCG@5 | FP@0.4 | R@5 com t=0.4 "
+        f"| config | R@1 | R@3 | R@5 | MRR | nDCG@5 | FP@{t_prod} | R@5 com t={t_prod} "
         "| t sugerido (R@5 / FP) | p50 ms | p95 ms | indexação s |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
@@ -414,8 +418,9 @@ def write_summary(results: dict[str, dict], related: dict | None, path: Path) ->
         r = results[n]
         bk, meta = r["metrics"]["by_kind"], r["meta"]
         trunc = meta["notes_over_max_seq_length"] if meta["chunking"]["mode"] == "whole" else 0
+        label = f"**{n}**" if n == PRODUCTION_CONFIG else n
         lines.append(
-            f"| {n} | {fmt(bk['literal']['recall@5'])} | {fmt(bk['paraphrase']['recall@5'])} "
+            f"| {label} | {fmt(bk['literal']['recall@5'])} | {fmt(bk['paraphrase']['recall@5'])} "
             f"| {fmt(bk['cross_lingual']['recall@5'])} "
             f"| {fmt(r['metrics']['tail_answer']['recall@5'])} | {meta['max_seq_length']} "
             f"| {trunc} |"
