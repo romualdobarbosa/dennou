@@ -89,17 +89,9 @@ RELATED_LAMBDAS = [0.8, 0.9, 1.0]
 def load_notes() -> list[dict]:
     notes = []
     for path in sorted(VAULT_DIR.glob("*.md")):
-        note = embed._parse_note(path)
+        note = embed.parse_note(path)
         if note is None:
             raise ValueError(f"nota inválida: {path}")
-        text = path.read_text(encoding="utf-8")
-        related = []
-        for line in text.splitlines():
-            if line.startswith("related:"):
-                raw = line.partition(":")[2].strip().strip("[]")
-                related = [r.strip() for r in raw.split(",") if r.strip()]
-                break
-        note["related"] = related
         notes.append(note)
     return notes
 

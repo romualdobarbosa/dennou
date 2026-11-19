@@ -100,32 +100,79 @@ def distance_to_score(distance: float) -> float:
     return round(1 - distance, 4)
 
 
-def _parse_note(path: Path) -> dict | None:
-    """Extrai frontmatter e body de uma nota markdown."""
-    text = path.read_text(encoding="utf-8")
-    match = re.match(r"^---\n(.*?)\n---\n(.*)", text, re.DOTALL)
+def _unquote(value: str) -> str:
+    """Tira aspas YAML simples ou duplas em volta do valor, se houver."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        inner = value[1:-1]
+        return inner.replace("''", "'") if value[0] == "'" else inner.replace('\\"', '"')
+    return value
+
+
+def _parse_value(value: str) -> str | list[str]:
+    """Valor de uma linha `chave: valor`: lista inline `[a, b]` ou escalar."""
+    value = value.strip()
+    if value.startswith("[") and value.endswith("]"):
+        return [_unquote(v.strip()) for v in value[1:-1].split(",") if v.strip()]
+    return _unquote(value)
+
+
+def parse_frontmatter(raw: str) -> dict[str, str | list[str]]:
+    """
+    Parser do subconjunto de YAML que as notas usam: `chave: valor` (o valor
+    pode ter ":"), lista inline `[a, b]` e lista em bloco (`chave:` seguida de
+    linhas `- item`). Feito à mão de propósito: um YAML estrito recusaria
+    título sem aspas com ": ", que o Obsidian aceita.
+    """
+    frontmatter: dict[str, str | list[str]] = {}
+    key = None
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if key and (stripped.startswith("- ") or stripped == "-"):
+            item = _unquote(stripped[1:].strip())
+            current = frontmatter.get(key)
+            frontmatter[key] = [*current, item] if isinstance(current, list) else [item]
+            continue
+        if ":" in line and not line[0].isspace():
+            k, _, value = line.partition(":")
+            key = k.strip()
+            frontmatter[key] = _parse_value(value)
+    return frontmatter
+
+
+def _as_list(value) -> list[str]:
+    if isinstance(value, list):
+        return [v for v in value if v]
+    return [value] if value else []
+
+
+def parse_note(path: Path) -> dict | None:
+    """Extrai frontmatter e body de uma nota markdown. Sem frontmatter ou sem id: None."""
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    match = re.match(r"^---\n(.*?)\n---[ \t]*(?:\n(.*))?\Z", text, re.DOTALL)
     if not match:
         return None
 
-    raw_fm, body = match.group(1), match.group(2).strip()
-
-    frontmatter = {}
-    for line in raw_fm.splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            frontmatter[key.strip()] = value.strip()
+    frontmatter = parse_frontmatter(match.group(1))
+    body = (match.group(2) or "").strip()
 
     note_id = frontmatter.get("id", "")
-    if not note_id:
+    if not note_id or not isinstance(note_id, str):
         return None
+
+    def scalar(key: str) -> str:
+        value = frontmatter.get(key, "")
+        return value if isinstance(value, str) else ", ".join(value)
 
     return {
         "id": note_id,
-        "title": frontmatter.get("title", "").strip('"'),
-        "type": frontmatter.get("type", ""),
-        "tags": frontmatter.get("tags", ""),
-        "area": frontmatter.get("area", ""),
-        "created": frontmatter.get("created", ""),
+        "title": scalar("title"),
+        "type": scalar("type"),
+        "tags": _as_list(frontmatter.get("tags")),
+        "area": scalar("area"),
+        "created": scalar("created"),
+        "related": _as_list(frontmatter.get("related")),
         "filename": path.stem,
         "body": body,
     }
@@ -137,13 +184,9 @@ def _extract_all_tags() -> set[str]:
     for path in VAULT_DIR.glob("*.md"):
         if path.name == "Home.md":
             continue
-        note = _parse_note(path)
-        if note and note["tags"]:
-            raw = note["tags"].strip("[]")
-            for tag in raw.split(","):
-                tag = tag.strip()
-                if tag:
-                    tags.add(tag)
+        note = parse_note(path)
+        if note:
+            tags.update(note["tags"])
     return tags
 
 
@@ -205,7 +248,7 @@ def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
     Retorna o ID da nota embedada.
     """
     path = Path(path)
-    note = _parse_note(path)
+    note = parse_note(path)
     if note is None:
         raise ValueError(f"Nota inválida ou sem frontmatter: {path}")
 
@@ -223,7 +266,7 @@ def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
             {
                 "title": note["title"],
                 "type": note["type"],
-                "tags": note["tags"],
+                "tags": ", ".join(note["tags"]),
                 "area": note["area"],
                 "created": note["created"],
                 "filename": note["filename"],
