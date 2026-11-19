@@ -33,7 +33,13 @@ _collection = None
 def _get_model():
     global _model
     if _model is None:
-        _model = SentenceTransformer(MODEL_NAME)
+        # Tenta só o cache local primeiro: evita a checagem de versão no
+        # Hugging Face Hub a cada execução. Sem cache (primeira vez, ou
+        # MODEL_NAME trocado), cai no carregamento normal, que baixa o modelo.
+        try:
+            _model = SentenceTransformer(MODEL_NAME, local_files_only=True)
+        except OSError:
+            _model = SentenceTransformer(MODEL_NAME)
     return _model
 
 
