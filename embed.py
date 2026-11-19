@@ -177,9 +177,11 @@ def sync_tags() -> None:
     TAGS_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def embed_note(path: str | Path) -> str:
+def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
     """
     Insere ou atualiza uma nota no ChromaDB.
+    Com sync_metadata, atualiza também as cores do graph.json e o TAGS.md
+    (o sync_vault desliga e atualiza uma vez só no fim).
     Retorna o ID da nota embedada.
     """
     path = Path(path)
@@ -209,8 +211,9 @@ def embed_note(path: str | Path) -> str:
         ],
     )
 
-    sync_graph_colors()
-    sync_tags()
+    if sync_metadata:
+        sync_graph_colors()
+        sync_tags()
     return note["id"]
 
 
@@ -257,11 +260,12 @@ def sync_vault():
 
     for path in notes:
         try:
-            note_id = embed_note(path)
+            note_id = embed_note(path, sync_metadata=False)
             print(f"  embedado: {path.name} ({note_id})")
         except ValueError as e:
             print(f"  pulado: {e}")
 
+    sync_graph_colors()
     sync_tags()
     print(f"\n{len(notes)} nota(s) processada(s).")
 
