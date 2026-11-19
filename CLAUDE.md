@@ -57,7 +57,7 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 Use os resultados do `embed.py search` (já executado antes de responder) para identificar notas com tema similar. Não é necessário ler arquivos do vault nem listar o diretório.
 
 - `related` (frontmatter): adicione os **IDs** (timestamps) das notas com score ≥ 0.55 retornadas pelo search. Ele registra notas próximas (navegação e gabarito do eval); a busca não usa esse campo
-- `## Links` (body): adicione `[[nome-do-arquivo-sem-extensao]]` para cada nota relacionada — alimenta o grafo do Obsidian
+- `## Links` (body): adicione `[[nome-do-arquivo-sem-extensao]]` para cada nota relacionada — alimenta o grafo do Obsidian. Essa seção fica fora do embedding (o `embed.py` tira ela do texto indexado)
 
 Exemplo:
 ```yaml

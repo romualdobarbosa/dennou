@@ -37,8 +37,9 @@ related: []
 > `related`: lista de IDs (timestamps) das notas relacionadas. Registra quais notas são próximas:
 > serve pra navegação, pros links do Obsidian e de gabarito no eval. A busca semântica **não** usa
 > esse campo. A expansão da busca pelo `related` foi medida no eval
-> (`eval/results/related_expansion.json`), deu ganho pequeno e não foi adotada.
-> Os wiki-links no body da nota (`## Links`) servem ao grafo do Obsidian.
+> (`eval/results/related_expansion.json`), não melhorou o ranking e não foi adotada.
+> Os wiki-links no body da nota (`## Links`) servem ao grafo do Obsidian e ficam fora do texto
+> embedado (experimento em `eval/results/links_section.json`).
 
 ### Valores válidos para `area`
 

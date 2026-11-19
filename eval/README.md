@@ -57,7 +57,7 @@ Ele confere as contagens, o frontmatter, se os ids batem com os nomes dos arquiv
 ## Como rodar o eval
 
 ```bash
-make eval         # as 12 configs e o experimento do related, grava em eval/results/
+make eval         # as 12 configs e os experimentos do related e da seção Links, grava em eval/results/
 make eval-quick   # gate do CI, 10 perguntas fixas com a config de produção
 ```
 
@@ -67,7 +67,7 @@ As configs cruzam três modelos (o `paraphrase-multilingual-MiniLM-L12-v2` de pr
 
 ### Chunks
 
-O chunking é o do `embed.py`, o mesmo da produção. Os chunks juntam parágrafos seguidos (sem partir bloco de código) até 256 tokens, ou até o `max_seq_length` do modelo se ele for menor, contando prefixo, título e tokens especiais. No MiniLM isso dá 128, então nenhum chunk é cortado. Parágrafo que sozinho não cabe vira janelas de palavras com 20% de sobreposição. O score da nota é o maior score entre os chunks dela, e cada nota aparece uma vez só no ranking.
+O chunking é o do `embed.py`, o mesmo da produção. Antes de quebrar, ele tira a seção `## Links` do corpo (vale também pro modo nota inteira, veja abaixo). Os chunks juntam parágrafos seguidos (sem partir bloco de código) até 256 tokens, ou até o `max_seq_length` do modelo se ele for menor, contando prefixo, título e tokens especiais. No MiniLM isso dá 128, então nenhum chunk é cortado. Parágrafo que sozinho não cabe vira janelas de palavras com 20% de sobreposição. O score da nota é o maior score entre os chunks dela, e cada nota aparece uma vez só no ranking.
 
 ### Métricas
 
@@ -86,7 +86,11 @@ O agente só usa nota com score ≥ 0.55 (`DENNOU_SCORE_THRESHOLD`, que antes er
 
 ### Expansão pelo related
 
-Na melhor config por nDCG@5, as notas listadas no `related` das top-3 entram com score max(score próprio, λ × score da nota de origem), e a lista é reordenada. Com λ = 1 a relacionada fica logo atrás da origem. Rodo λ = 0.8, 0.9 e 1.0.
+Na melhor config por nDCG@5, as notas listadas no `related` das top-3 entram com score max(score próprio, λ × score da nota de origem), e a lista é reordenada. Com λ = 1 a relacionada fica logo atrás da origem. Rodo λ = 0.8, 0.9 e 1.0. Na rodada atual (em `bge-m3-chunk-notitle`) nenhum λ melhora o Recall@5 e o λ = 1.0 piora. Numa rodada anterior, com a seção `## Links` ainda embedada, a melhor config era a `bge-m3-chunk-title` e o λ = 1.0 subia o Recall@5 de 0.900 pra 0.940, mas o λ foi escolhido nas mesmas perguntas em que foi medido. Não adotei, e a busca não usa o `related`.
+
+### Seção `## Links`
+
+Toda nota termina com `## Links`, os wiki-links do Obsidian pras notas relacionadas. Isso é navegação, não conteúdo, e embedado vira texto feito de nomes de arquivo de outras notas. O experimento roda a config de produção de novo com a seção invertida (com, se a produção tira; sem, se a produção mantém) e grava `eval/results/links_section.json`. Sem a seção, o Recall@5 foi de 0.940 pra 0.960 (uma pergunta em inglês a mais no top-5), o nDCG@5 de 0.819 pra 0.832, e o falso positivo em 0.55 ficou em 10%. Adotei, com `embed.KEEP_LINKS_SECTION = False`, e o eval inteiro usa o mesmo texto que a produção.
 
 ### Gate do CI
 
