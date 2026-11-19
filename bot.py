@@ -25,8 +25,11 @@ PROJECT_DIR = Path(__file__).parent.resolve()
 # Ferramentas que o agente pode usar SEM confirmação (headless não pode pedir).
 # Restrito de propósito: rodar o embed.py e mexer em arquivos do vault. Mesmo
 # travado por chat_id, o agente não consegue rodar comando arbitrário.
+# A regra de Bash casa por prefixo, então tem de bater com o comando que o
+# CLAUDE.md manda rodar (`.venv/bin/python3 embed.py ...`); o python3 do
+# sistema nem tem as dependências.
 ALLOWED_TOOLS = [
-    "Bash(python3 embed.py:*)",
+    "Bash(.venv/bin/python3 embed.py:*)",
     "Read",
     "Write",
     "Edit",
