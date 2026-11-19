@@ -152,10 +152,11 @@
         "recall": 0.0
       }
     ],
+    "production_threshold": 0.55,
     "at_production": {
-      "threshold": 0.4,
-      "fp_rate": 0.8,
-      "recall": 0.92
+      "threshold": 0.55,
+      "fp_rate": 0.0,
+      "recall": 0.72
     },
     "suggested": {
       "threshold": 0.55,
@@ -165,9 +166,9 @@
     "criterion": "maior Recall@5 (só notas com score >= t) com FP <= 10%"
   },
   "timing": {
-    "query_p50_ms": 80.51,
-    "query_p95_ms": 105.45,
-    "index_total_s": 115.444,
+    "query_p50_ms": 78.58,
+    "query_p95_ms": 100.14,
+    "index_total_s": 111.816,
     "model_load_s": 0.0
   },
   "queries": [
@@ -2001,8 +2002,8 @@
     "long_notes_over_max_seq_length": 0,
     "vault": "eval/vault",
     "env": {
-      "date": "2026-11-19T03:37:31+00:00",
-      "commit": "2c1b983",
+      "date": "2026-11-19T04:03:47+00:00",
+      "commit": "4eda628",
       "device": "cpu",
       "cpu": "13th Gen Intel(R) Core(TM) i5-13420H",
       "torch_threads": 8,

@@ -1,23 +1,23 @@
 # Resultados do eval de retrieval
 
-Gerado por `make eval` em 2026-11-19 (commit `2c1b983`), device `cpu` (13th Gen Intel(R) Core(TM) i5-13420H, 8 threads, torch 2.15.0+cu132). Vault sintético de `eval/vault` (80 notas), 60 perguntas (50 com resposta, 10 sem). `minilm-whole-title` é a config de produção.
+Gerado por `make eval` em 2026-11-19 (commit `4eda628`), device `cpu` (13th Gen Intel(R) Core(TM) i5-13420H, 8 threads, torch 2.15.0+cu132). Vault sintético de `eval/vault` (80 notas), 60 perguntas (50 com resposta, 10 sem). A config de produção (a que o `embed.py` usa) é **`minilm-chunk-title`**, em negrito nas tabelas, com corte em 0.55 (`DENNOU_SCORE_THRESHOLD`).
 
 ## Geral (50 perguntas com resposta)
 
-| config | R@1 | R@3 | R@5 | MRR | nDCG@5 | FP@0.4 | R@5 com t=0.4 | t sugerido (R@5 / FP) | p50 ms | p95 ms | indexação s |
+| config | R@1 | R@3 | R@5 | MRR | nDCG@5 | FP@0.55 | R@5 com t=0.55 | t sugerido (R@5 / FP) | p50 ms | p95 ms | indexação s |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| **minilm-whole-title** | 0.700 | 0.860 | 0.880 | 0.779 | 0.775 | 20% | 0.740 | 0.50 (0.600 / 10%) | 14.6 | 26.0 | 4.8 |
-| minilm-whole-notitle | 0.660 | 0.860 | 0.920 | 0.766 | 0.793 | 20% | 0.800 | 0.45 (0.720 / 10%) | 11.8 | 15.6 | 3.6 |
-| minilm-chunk-title | 0.720 | 0.820 | 0.940 | 0.799 | 0.819 | 40% | 0.840 | 0.55 (0.740 / 10%) | 14.7 | 16.5 | 14.4 |
-| minilm-chunk-notitle | 0.720 | 0.880 | 0.960 | 0.812 | 0.817 | 40% | 0.900 | 0.60 (0.500 / 0%) | 14.4 | 16.8 | 12.8 |
-| e5-small-whole-title | 0.700 | 0.840 | 0.880 | 0.775 | 0.784 | 100% | 0.880 | 0.90 (0.240 / 0%) | 14.8 | 16.8 | 8.2 |
-| e5-small-whole-notitle | 0.680 | 0.840 | 0.860 | 0.767 | 0.764 | 100% | 0.860 | 0.90 (0.260 / 0%) | 14.8 | 16.4 | 7.9 |
-| e5-small-chunk-title | 0.700 | 0.800 | 0.840 | 0.764 | 0.760 | 100% | 0.840 | 0.90 (0.400 / 0%) | 15.2 | 17.2 | 13.1 |
-| e5-small-chunk-notitle | 0.760 | 0.840 | 0.880 | 0.812 | 0.813 | 100% | 0.880 | 0.90 (0.360 / 0%) | 14.9 | 16.8 | 12.2 |
-| bge-m3-whole-title | 0.820 | 0.860 | 0.900 | 0.854 | 0.837 | 80% | 0.900 | 0.55 (0.700 / 10%) | 85.9 | 111.4 | 118.4 |
-| bge-m3-whole-notitle | 0.800 | 0.880 | 0.920 | 0.851 | 0.827 | 80% | 0.920 | 0.55 (0.720 / 0%) | 80.5 | 105.5 | 115.4 |
-| bge-m3-chunk-title | 0.820 | 0.900 | 0.900 | 0.870 | 0.856 | 90% | 0.900 | 0.60 (0.680 / 0%) | 85.5 | 107.1 | 141.5 |
-| bge-m3-chunk-notitle | 0.800 | 0.900 | 0.900 | 0.855 | 0.852 | 90% | 0.900 | 0.55 (0.800 / 10%) | 82.5 | 108.4 | 133.3 |
+| minilm-whole-title | 0.700 | 0.860 | 0.880 | 0.779 | 0.775 | 0% | 0.540 | 0.50 (0.600 / 10%) | 12.8 | 15.6 | 3.2 |
+| minilm-whole-notitle | 0.660 | 0.860 | 0.920 | 0.766 | 0.793 | 0% | 0.380 | 0.45 (0.720 / 10%) | 13.8 | 15.9 | 3.3 |
+| **minilm-chunk-title** | 0.720 | 0.820 | 0.940 | 0.799 | 0.819 | 10% | 0.740 | 0.55 (0.740 / 10%) | 10.1 | 12.2 | 13.5 |
+| minilm-chunk-notitle | 0.720 | 0.880 | 0.960 | 0.812 | 0.817 | 20% | 0.720 | 0.60 (0.500 / 0%) | 10.7 | 14.6 | 12.3 |
+| e5-small-whole-title | 0.700 | 0.840 | 0.880 | 0.775 | 0.784 | 100% | 0.880 | 0.90 (0.240 / 0%) | 11.3 | 15.6 | 7.8 |
+| e5-small-whole-notitle | 0.680 | 0.840 | 0.860 | 0.767 | 0.764 | 100% | 0.860 | 0.90 (0.260 / 0%) | 14.4 | 16.7 | 7.6 |
+| e5-small-chunk-title | 0.700 | 0.800 | 0.840 | 0.764 | 0.760 | 100% | 0.840 | 0.90 (0.400 / 0%) | 11.4 | 16.1 | 12.7 |
+| e5-small-chunk-notitle | 0.760 | 0.840 | 0.880 | 0.812 | 0.813 | 100% | 0.880 | 0.90 (0.360 / 0%) | 12.0 | 18.6 | 11.9 |
+| bge-m3-whole-title | 0.820 | 0.860 | 0.900 | 0.854 | 0.837 | 10% | 0.700 | 0.55 (0.700 / 10%) | 80.0 | 103.7 | 113.8 |
+| bge-m3-whole-notitle | 0.800 | 0.880 | 0.920 | 0.851 | 0.827 | 0% | 0.720 | 0.55 (0.720 / 0%) | 78.6 | 100.1 | 111.8 |
+| bge-m3-chunk-title | 0.820 | 0.900 | 0.900 | 0.870 | 0.856 | 20% | 0.780 | 0.60 (0.680 / 0%) | 80.6 | 101.3 | 138.1 |
+| bge-m3-chunk-notitle | 0.800 | 0.900 | 0.900 | 0.855 | 0.852 | 10% | 0.800 | 0.55 (0.800 / 10%) | 79.6 | 99.8 | 128.7 |
 
 ## Recall@5 por kind e nas perguntas de cauda
 
@@ -27,7 +27,7 @@ Cauda = as 12 perguntas cuja resposta só aparece depois de ~400 palavras numa n
 |---|---|---|---|---|---|---|
 | minilm-whole-title | 0.960 | 0.733 | 0.900 | 0.750 | 128 | 80 |
 | minilm-whole-notitle | 1.000 | 0.800 | 0.900 | 0.833 | 128 | 80 |
-| minilm-chunk-title | 1.000 | 0.867 | 0.900 | 1.000 | 128 | 0 |
+| **minilm-chunk-title** | 1.000 | 0.867 | 0.900 | 1.000 | 128 | 0 |
 | minilm-chunk-notitle | 1.000 | 0.867 | 1.000 | 1.000 | 128 | 0 |
 | e5-small-whole-title | 1.000 | 0.600 | 1.000 | 0.833 | 512 | 30 |
 | e5-small-whole-notitle | 1.000 | 0.533 | 1.000 | 0.833 | 512 | 30 |

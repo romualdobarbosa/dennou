@@ -33,8 +33,9 @@ demo:
 eval:
 	uv run python -m eval.run_eval
 
-# Gate do CI: 10 perguntas fixas com a config de produção. Hoje dá Recall@5 = 1.0;
-# o mínimo de 0.8 tolera até 2 erros antes de falhar.
+# Gate do CI: 10 perguntas fixas com a config de produção (minilm-chunk-title).
+# Hoje dá Recall@5 = 0.9 (a q026, uma paráfrase, erra também no eval completo);
+# o mínimo de 0.8 tolera mais um erro antes de falhar.
 EVAL_QUICK_MIN_RECALL ?= 0.8
 
 eval-quick:

@@ -17,7 +17,7 @@ Eu queria medir se a busca semântica do dennou acha a nota certa, e pra isso n�
 
 Todo o conteúdo é técnico e conferido, sem nada pessoal. Os tamanhos variam de propósito. São 48 notas curtas (até umas 150 palavras), 20 médias (250 a 400) e 12 longas (de 620 a 700 palavras).
 
-As notas longas existem pra expor um limite conhecido. O modelo de embedding atual trunca a entrada em 128 tokens, então tudo que vem depois disso some do vetor. Em cada nota longa, uma informação específica aparece só no trecho final, sempre depois de umas 400 palavras. Tipo o nível de isolamento padrão do MySQL, no fim da nota de transações, ou o `loginctl enable-linger`, no fim da nota de systemd. As 12 perguntas listadas em `tail_answer_queries` só têm resposta nesses trechos.
+As notas longas existem pra expor um limite conhecido. O modelo de embedding trunca a entrada em 128 tokens, então, indexando a nota inteira, tudo que vem depois disso some do vetor (foi por isso que a produção passou a indexar em chunks). Em cada nota longa, uma informação específica aparece só no trecho final, sempre depois de umas 400 palavras. Tipo o nível de isolamento padrão do MySQL, no fim da nota de transações, ou o `loginctl enable-linger`, no fim da nota de systemd. As 12 perguntas listadas em `tail_answer_queries` só têm resposta nesses trechos.
 
 Também coloquei pares de notas fáceis de confundir, pra busca não ficar trivial. Por exemplo `git reset`, `git revert` e `git restore`, WHERE e HAVING, lista e tupla, `chmod` e `chown`.
 
@@ -63,11 +63,11 @@ make eval-quick   # gate do CI, 10 perguntas fixas com a config de produção
 
 O `make eval` roda tudo em CPU (dá pra trocar com `uv run python -m eval.run_eval --device cuda`) e baixa o e5-small e o bge-m3 na primeira vez, uns 2,5 GB no cache do Hugging Face. Cada config indexa `eval/vault` num Chroma temporário, com distância cosseno igual à produção, e nunca encosta no vault real nem no `chroma_db/`. Os resultados ficam em `eval/results/<config>.json`, com as métricas, a curva de threshold, o top-5 de cada pergunta e os metadados da rodada (modelo, `max_seq_length`, chunking, commit, CPU, versão do torch). A tabela comparativa sai em `eval/results/summary.md`.
 
-As configs cruzam três modelos (o `paraphrase-multilingual-MiniLM-L12-v2` de hoje, o `intfloat/multilingual-e5-small` com os prefixos `query: ` e `passage: ` que ele exige, e o `BAAI/bge-m3`), nota inteira contra chunks, e texto com e sem o título. A config `minilm-whole-title` é a de produção, e o harness usa as mesmas funções do `embed.py` pra montar o texto, carregar o modelo e calcular o score. Conferi que o top-5 dela bate com o `embed.py search` em todas as 60 perguntas.
+As configs cruzam três modelos (o `paraphrase-multilingual-MiniLM-L12-v2` de produção, o `intfloat/multilingual-e5-small` com os prefixos `query: ` e `passage: ` que ele exige, e o `BAAI/bge-m3`), nota inteira contra chunks, e texto com e sem o título. A config `minilm-chunk-title` é a de produção (antes era `minilm-whole-title`, uma nota inteira por vetor). O harness não tem cópia da lógica de produção. Ele chama as funções do `embed.py` pra ler a nota, quebrar em chunks (`note_chunks`), gravar no Chroma (`index_note`), juntar os chunks por nota (`best_chunk_per_note`) e calcular o score, e o corte vem do mesmo `SCORE_THRESHOLD`. Conferi que o top-5 dela bate com o `embed.py search` nas 60 perguntas.
 
 ### Chunks
 
-Os chunks juntam parágrafos seguidos (sem partir bloco de código) até 256 tokens, ou até o `max_seq_length` do modelo se ele for menor, contando prefixo, título e tokens especiais. No MiniLM isso dá 128, então nenhum chunk é cortado. Parágrafo que sozinho não cabe vira janelas de palavras com 20% de sobreposição. O score da nota é o maior score entre os chunks dela, e cada nota aparece uma vez só no ranking.
+O chunking é o do `embed.py`, o mesmo da produção. Os chunks juntam parágrafos seguidos (sem partir bloco de código) até 256 tokens, ou até o `max_seq_length` do modelo se ele for menor, contando prefixo, título e tokens especiais. No MiniLM isso dá 128, então nenhum chunk é cortado. Parágrafo que sozinho não cabe vira janelas de palavras com 20% de sobreposição. O score da nota é o maior score entre os chunks dela, e cada nota aparece uma vez só no ranking.
 
 ### Métricas
 
@@ -82,7 +82,7 @@ Também separo o Recall@5 das 12 perguntas de cauda, as do `tail_answer_queries`
 
 ### Threshold
 
-O agente só usa nota com score ≥ 0.4. Pra cada config calculo uma curva de 0.0 a 1.0, de 0.05 em 0.05. Num eixo fica o falso positivo, que é a fração das perguntas `no_answer` cujo top-1 passa do threshold (o agente usaria uma nota que não responde nada). No outro fica o Recall@5 das perguntas com resposta contando só as notas acima do threshold. O threshold sugerido é o de maior recall com falso positivo de no máximo 10% (no empate, o menor falso positivo e depois o threshold mais alto). Com só 10 perguntas sem resposta, cada uma vale 10 pontos de falso positivo, então trate esse número como indicação e não como valor exato. O score muda de escala entre modelos (no e5 tudo fica acima de 0.7), por isso o threshold não passa de um modelo pro outro.
+O agente só usa nota com score ≥ 0.55 (`DENNOU_SCORE_THRESHOLD`, que antes era 0.4). Pra cada config calculo uma curva de 0.0 a 1.0, de 0.05 em 0.05. Num eixo fica o falso positivo, que é a fração das perguntas `no_answer` cujo top-1 passa do threshold (o agente usaria uma nota que não responde nada). No outro fica o Recall@5 das perguntas com resposta contando só as notas acima do threshold. O threshold sugerido é o de maior recall com falso positivo de no máximo 10% (no empate, o menor falso positivo e depois o threshold mais alto). Com só 10 perguntas sem resposta, cada uma vale 10 pontos de falso positivo, então trate esse número como indicação e não como valor exato. O score muda de escala entre modelos (no e5 tudo fica acima de 0.7), por isso o threshold não passa de um modelo pro outro.
 
 ### Expansão pelo related
 
@@ -90,4 +90,4 @@ Na melhor config por nDCG@5, as notas listadas no `related` das top-3 entram com
 
 ### Gate do CI
 
-O `make eval-quick` indexa as 80 notas com a config de produção, roda 10 perguntas fixas (`QUICK_QUERIES` em `run_eval.py`, nenhuma de cauda) e falha se o Recall@5 ficar abaixo de `EVAL_QUICK_MIN_RECALL`, que é 0.8. Hoje ele dá 1.0, então o gate aguenta até dois erros antes de quebrar. Leva uns 10 segundos em CPU depois que o MiniLM está no cache.
+O `make eval-quick` indexa as 80 notas com a config de produção (`minilm-chunk-title`), roda 10 perguntas fixas (`QUICK_QUERIES` em `run_eval.py`, nenhuma de cauda) e falha se o Recall@5 ficar abaixo de `EVAL_QUICK_MIN_RECALL`, que é 0.8. Com a nota inteira ele dava 1.0. Com chunks dá 0.9, porque a q026 (uma paráfrase sobre `git revert`) cai pra fora do top-5, e ela erra também no eval completo. Mantive o mínimo em 0.8, então o gate aguenta mais um erro antes de quebrar. Leva uns 20 segundos em CPU depois que o MiniLM está no cache.
