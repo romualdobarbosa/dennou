@@ -112,7 +112,7 @@ def check_notes() -> dict[str, dict]:
 
 
 def check_queries(notes: dict[str, dict]) -> list[dict]:
-    lines = [l for l in QUERIES.read_text(encoding="utf-8").splitlines() if l.strip()]
+    lines = [ln for ln in QUERIES.read_text(encoding="utf-8").splitlines() if ln.strip()]
     if len(lines) != EXPECTED_QUERIES:
         err(f"esperado {EXPECTED_QUERIES} queries, achei {len(lines)}")
     queries = []
