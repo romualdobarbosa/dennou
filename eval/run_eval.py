@@ -110,7 +110,13 @@ def parse_config(name: str) -> dict:
     mode = "whole" if "-whole-" in name else "chunk"
     if model not in MODELS or rest not in ("title", "notitle"):
         raise ValueError(f"config desconhecida: {name} (use uma de {all_configs()})")
-    return {"name": name, "model": model, "chunking": mode, "include_title": rest == "title"}
+    return {
+        "name": name,
+        "model": model,
+        "chunking": mode,
+        "include_title": rest == "title",
+        "keep_links": embed.KEEP_LINKS_SECTION,
+    }
 
 
 # --------------------------------------------------------------------------- execução
@@ -189,7 +195,9 @@ def run_config(config: dict, notes, queries, manifest, device: str, model_cache:
     texts_by_note = {}
     truncated = []
     for note in notes:
-        full = spec["passage_prefix"] + embed.note_text(note, config["include_title"])
+        full = spec["passage_prefix"] + embed.note_text(
+            note, config["include_title"], config["keep_links"]
+        )
         if embed.count_tokens(model, full) > max_seq:
             truncated.append(note["id"])
         if config["chunking"] == "whole":
@@ -197,7 +205,11 @@ def run_config(config: dict, notes, queries, manifest, device: str, model_cache:
         else:
             # Mesma função do embed.py: o chunking do eval é o de produção.
             texts_by_note[note["id"]] = embed.note_chunks(
-                note, model, config["include_title"], spec["passage_prefix"]
+                note,
+                model,
+                config["include_title"],
+                spec["passage_prefix"],
+                keep_links=config["keep_links"],
             )
 
     with tempfile.TemporaryDirectory(prefix="dennou-eval-") as tmp:
@@ -237,6 +249,7 @@ def run_config(config: dict, notes, queries, manifest, device: str, model_cache:
         "max_seq_length": max_seq,
         "embedding_dim": model.get_embedding_dimension(),
         "include_title": config["include_title"],
+        "keep_links_section": config["keep_links"],
         "chunking": {
             "mode": config["chunking"],
             "max_tokens": chunk_limit if config["chunking"] == "chunk" else None,
@@ -360,6 +373,39 @@ def related_experiment(per_query, notes, manifest) -> dict:
     return out
 
 
+# --------------------------------------------------------------------------- links
+
+
+def links_experiment(prod_result, notes, queries, manifest, device, cache) -> dict:
+    """
+    Produção com e sem a seção `## Links` (wiki-links) no texto embedado. Roda
+    a config de produção com o KEEP_LINKS_SECTION invertido e compara com ela.
+    """
+    config = parse_config(PRODUCTION_CONFIG)
+    config["keep_links"] = not config["keep_links"]
+    variant, _ = run_config(config, notes, queries, manifest, device, cache)
+
+    def row(r):
+        return {
+            "keep_links_section": r["meta"]["keep_links_section"],
+            "overall": r["metrics"]["overall"],
+            "by_kind": r["metrics"]["by_kind"],
+            "tail_answer": r["metrics"]["tail_answer"],
+            "at_production_threshold": r["threshold"]["at_production"],
+            "suggested_threshold": r["threshold"]["suggested"],
+            "no_answer_top1_score_mean": r["metrics"]["no_answer_top1_score_mean"],
+            "items_indexed": r["meta"]["chunking"]["items_indexed"],
+        }
+
+    rows = sorted([row(prod_result), row(variant)], key=lambda x: x["keep_links_section"])
+    return {
+        "config": PRODUCTION_CONFIG,
+        "production_keeps_links": embed.KEEP_LINKS_SECTION,
+        "without_links": rows[0],
+        "with_links": rows[1],
+    }
+
+
 # --------------------------------------------------------------------------- relatório
 
 
@@ -367,7 +413,9 @@ def fmt(x: float) -> str:
     return f"{x:.3f}"
 
 
-def write_summary(results: dict[str, dict], related: dict | None, path: Path) -> None:
+def write_summary(
+    results: dict[str, dict], related: dict | None, links: dict | None, path: Path
+) -> None:
     names = [n for n in all_configs() if n in results]
     first = results[names[0]]["meta"]
     env = first["env"]
@@ -425,6 +473,29 @@ def write_summary(results: dict[str, dict], related: dict | None, path: Path) ->
             f"| {fmt(r['metrics']['tail_answer']['recall@5'])} | {meta['max_seq_length']} "
             f"| {trunc} |"
         )
+    if links:
+        t_prod_s = f"{PRODUCTION_THRESHOLD:g}"
+        lines += [
+            "",
+            f"## Seção `## Links` no texto embedado ({links['config']})",
+            "",
+            "Os wiki-links do fim da nota viram um chunk só de nomes de outras notas. "
+            f"Produção hoje: {'com' if links['production_keeps_links'] else 'sem'} a seção.",
+            "",
+            f"| variante | R@5 | nDCG@5 | MRR | R@5 cauda | FP@{t_prod_s} | R@5 com t={t_prod_s} "
+            "| chunks |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for label, key in (("com `## Links`", "with_links"), ("sem `## Links`", "without_links")):
+            v = links[key]
+            o, ap = v["overall"], v["at_production_threshold"]
+            if v["keep_links_section"] == links["production_keeps_links"]:
+                label = f"**{label}**"
+            lines.append(
+                f"| {label} | {fmt(o['recall@5'])} | {fmt(o['ndcg@5'])} | {fmt(o['mrr'])} "
+                f"| {fmt(v['tail_answer']['recall@5'])} | {ap['fp_rate']:.0%} "
+                f"| {fmt(ap['recall'])} | {v['items_indexed']} |"
+            )
     if related:
         b = related["baseline"]
         lines += [
@@ -469,6 +540,7 @@ def main() -> int:
     ap.add_argument("--quick", action="store_true", help="gate do CI: 10 perguntas, produção")
     ap.add_argument("--min-recall5", type=float, default=None, help="mínimo do --quick")
     ap.add_argument("--no-related", action="store_true", help="pula o experimento do related")
+    ap.add_argument("--no-links", action="store_true", help="pula o experimento da seção Links")
     args = ap.parse_args()
 
     notes, queries = load_notes(), load_queries()
@@ -520,6 +592,16 @@ def main() -> int:
             json.dumps(related, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
 
+    links = None
+    if not args.no_links and PRODUCTION_CONFIG in results:
+        print(f"== {PRODUCTION_CONFIG} com/sem a seção ## Links", flush=True)
+        links = links_experiment(
+            results[PRODUCTION_CONFIG], notes, queries, manifest, args.device, cache
+        )
+        (args.out / "links_section.json").write_text(
+            json.dumps(links, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+
     # O summary sempre reflete todos os JSONs gravados em --out.
     all_results = {}
     for n in all_configs():
@@ -528,7 +610,9 @@ def main() -> int:
             all_results[n] = json.loads(p.read_text(encoding="utf-8"))
     if related is None and (args.out / "related_expansion.json").exists():
         related = json.loads((args.out / "related_expansion.json").read_text(encoding="utf-8"))
-    write_summary(all_results, related, args.out / "summary.md")
+    if links is None and (args.out / "links_section.json").exists():
+        links = json.loads((args.out / "links_section.json").read_text(encoding="utf-8"))
+    write_summary(all_results, related, links, args.out / "summary.md")
     out = args.out.resolve()
     print(f"resultados em {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
     return 0
