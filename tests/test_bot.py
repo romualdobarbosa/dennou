@@ -130,3 +130,14 @@ def test_allowed_tools_cover_claude_md_commands():
     prefixes = [m.group(1) for t in bot.ALLOWED_TOOLS if (m := re.fullmatch(r"Bash\((.*):\*\)", t))]
     for command in commands:
         assert any(command.startswith(p) for p in prefixes), command
+
+
+def test_file_tools_are_scoped_to_the_vault():
+    """Nenhuma ferramenta de arquivo liberada sem caminho, e os segredos negados."""
+    for rule in bot.ALLOWED_TOOLS:
+        assert re.fullmatch(r"(Bash|Read|Edit)\(.+\)", rule), rule
+    writable = [r for r in bot.ALLOWED_TOOLS if r.startswith("Edit(")]
+    assert writable == ["Edit(./vault/**)"]
+    assert "Read(./.env)" in bot.DISALLOWED_TOOLS
+    assert "Read(./.bot_session)" in bot.DISALLOWED_TOOLS
+    assert set(bot.TOOLS.split(",")) == {"Bash", "Read", "Edit", "Write"}

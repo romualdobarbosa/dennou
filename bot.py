@@ -22,19 +22,30 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.resolve()
 
-# Ferramentas que o agente pode usar SEM confirmação (headless não pode pedir).
-# Restrito de propósito: rodar o embed.py e mexer em arquivos do vault. Mesmo
-# travado por chat_id, o agente não consegue rodar comando arbitrário.
-# A regra de Bash casa por prefixo, então tem de bater com o comando que o
-# CLAUDE.md manda rodar (`.venv/bin/python3 embed.py ...`); o python3 do
-# sistema nem tem as dependências.
+# Permissões do agente headless (`claude -p` não pode pedir confirmação, então
+# tudo que não está liberado é negado). Mesmo travado por chat_id, o agente só
+# roda o embed.py e só mexe em arquivos do vault.
+#
+# TOOLS: as únicas ferramentas que existem na sessão (sem Glob, Grep, WebFetch...).
+TOOLS = "Bash,Read,Edit,Write"
+# ALLOWED_TOOLS: o que roda sem confirmação.
+# - A regra de Bash casa por prefixo, então tem de bater com o comando que o
+#   CLAUDE.md manda rodar (`.venv/bin/python3 embed.py ...`).
+# - Caminhos com `./` são relativos ao diretório do projeto. `Edit(...)` vale
+#   também pro Write. Ler ou escrever fora do repo é negado.
 ALLOWED_TOOLS = [
     "Bash(.venv/bin/python3 embed.py:*)",
-    "Read",
-    "Write",
-    "Edit",
-    "Glob",
-    "Grep",
+    "Read(./vault/**)",
+    "Read(./SCHEMA.md)",
+    "Read(./TAGS.md)",
+    "Edit(./vault/**)",
+]
+# DISALLOWED_TOOLS: o Claude Code deixa ler qualquer arquivo dentro do diretório
+# de trabalho sem pedir, então os segredos do projeto são negados explicitamente.
+DISALLOWED_TOOLS = [
+    "Read(./.env)",
+    "Read(./.bot_session)",
+    "Edit(./.env)",
 ]
 
 CLAUDE_TIMEOUT = 300  # segundos por mensagem
@@ -134,8 +145,12 @@ def _run_claude(message: str, session_id: str | None):
         "json",
         "--model",
         MODEL,
+        "--tools",
+        TOOLS,
         "--allowedTools",
         *ALLOWED_TOOLS,
+        "--disallowedTools",
+        *DISALLOWED_TOOLS,
     ]
     if session_id:
         cmd += ["--resume", session_id]
