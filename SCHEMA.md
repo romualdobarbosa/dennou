@@ -34,7 +34,10 @@ related: []
 ---
 ```
 
-> `related`: lista de IDs (timestamps) das notas relacionadas — usado pelo RAG para navegação semântica.
+> `related`: lista de IDs (timestamps) das notas relacionadas. Registra quais notas são próximas:
+> serve pra navegação, pros links do Obsidian e de gabarito no eval. A busca semântica **não** usa
+> esse campo. A expansão da busca pelo `related` foi medida no eval
+> (`eval/results/related_expansion.json`), deu ganho pequeno e não foi adotada.
 > Os wiki-links no body da nota (`## Links`) servem ao grafo do Obsidian.
 
 ### Valores válidos para `area`
