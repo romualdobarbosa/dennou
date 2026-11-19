@@ -74,12 +74,21 @@ def load_env(path: Path) -> None:
         os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
 
-load_env(PROJECT_DIR / ".env")
+TOKEN: str | None = None
+OWNER_ID: str | None = None
+MODEL = "sonnet"
+API = ""
 
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-OWNER_ID = os.environ.get("TELEGRAM_OWNER_ID")
-MODEL = os.environ.get("DENNOU_BOT_MODEL", "sonnet")
-API = f"https://api.telegram.org/bot{TOKEN}"
+
+def configure(env_file: Path = PROJECT_DIR / ".env") -> None:
+    """Lê o .env e as variáveis de ambiente. Fica fora do import pra os testes
+    não carregarem o .env de verdade."""
+    global TOKEN, OWNER_ID, MODEL, API
+    load_env(env_file)
+    TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+    OWNER_ID = os.environ.get("TELEGRAM_OWNER_ID")
+    MODEL = os.environ.get("DENNOU_BOT_MODEL", "sonnet")
+    API = f"https://api.telegram.org/bot{TOKEN}"
 
 
 def tg(method: str, **params):
@@ -102,11 +111,16 @@ def tg(method: str, **params):
     return payload
 
 
+def split_message(text: str) -> list[str]:
+    """Quebra o texto em pedaços de até TELEGRAM_MAX caracteres."""
+    text = text or "⚠️ (resposta vazia)"
+    return [text[i : i + TELEGRAM_MAX] for i in range(0, len(text), TELEGRAM_MAX)]
+
+
 def send(chat_id, text: str) -> None:
     """Envia texto ao usuário, quebrando em pedaços se passar do limite."""
-    text = text or "⚠️ (resposta vazia)"
-    for i in range(0, len(text), TELEGRAM_MAX):
-        tg("sendMessage", chat_id=chat_id, text=text[i : i + TELEGRAM_MAX])
+    for part in split_message(text):
+        tg("sendMessage", chat_id=chat_id, text=part)
 
 
 def _run_claude(message: str, session_id: str | None):
@@ -168,7 +182,32 @@ def ask_agent(message: str) -> str:
     return data.get("result", "").strip()
 
 
+def handle_message(msg: dict) -> None:
+    """Trata uma mensagem do Telegram: trava pelo chat_id, /novo e repasse ao agente."""
+    if not msg or "text" not in msg:
+        return
+    chat_id = msg["chat"]["id"]
+    if str(chat_id) != str(OWNER_ID):
+        print(f"[lock] chat_id não autorizado: {chat_id}", flush=True)
+        return
+    text = msg["text"]
+    print(f"[msg] {text[:80]}", flush=True)
+    if text.strip().lower() in ("/novo", "/reset"):
+        clear_session()
+        send(chat_id, "🧹 Conversa reiniciada. A próxima mensagem começa do zero.")
+        return
+    try:
+        tg("sendChatAction", chat_id=chat_id, action="typing")
+        reply = ask_agent(text)
+        send(chat_id, reply)
+    except Exception as e:  # noqa: BLE001
+        print(f"[handler] erro: {e}", flush=True)
+        with contextlib.suppress(Exception):
+            send(chat_id, f"⚠️ Erro interno: {e}")
+
+
 def main() -> None:
+    configure()
     if not TOKEN or not OWNER_ID:
         sys.exit("Defina TELEGRAM_BOT_TOKEN e TELEGRAM_OWNER_ID no .env (veja .env.example).")
 
@@ -187,27 +226,7 @@ def main() -> None:
 
         for upd in updates.get("result", []):
             offset = upd["update_id"] + 1
-            msg = upd.get("message") or upd.get("edited_message")
-            if not msg or "text" not in msg:
-                continue
-            chat_id = msg["chat"]["id"]
-            if str(chat_id) != str(OWNER_ID):
-                print(f"[lock] chat_id não autorizado: {chat_id}", flush=True)
-                continue
-            text = msg["text"]
-            print(f"[msg] {text[:80]}", flush=True)
-            if text.strip().lower() in ("/novo", "/reset"):
-                clear_session()
-                send(chat_id, "🧹 Conversa reiniciada. A próxima mensagem começa do zero.")
-                continue
-            try:
-                tg("sendChatAction", chat_id=chat_id, action="typing")
-                reply = ask_agent(text)
-                send(chat_id, reply)
-            except Exception as e:  # noqa: BLE001
-                print(f"[handler] erro: {e}", flush=True)
-                with contextlib.suppress(Exception):
-                    send(chat_id, f"⚠️ Erro interno: {e}")
+            handle_message(upd.get("message") or upd.get("edited_message"))
 
 
 if __name__ == "__main__":
