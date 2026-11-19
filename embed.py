@@ -49,35 +49,55 @@ _COLOR_PALETTE = [
 ]
 
 _model = None
-_client = None
 _collection = None
+
+
+def load_model(name: str = MODEL_NAME, device: str | None = None) -> SentenceTransformer:
+    """
+    Carrega um modelo do sentence-transformers.
+    Tenta só o cache local primeiro: evita a checagem de versão no
+    Hugging Face Hub a cada execução. Sem cache (primeira vez, ou
+    modelo trocado), cai no carregamento normal, que baixa o modelo.
+    """
+    try:
+        return SentenceTransformer(name, device=device, local_files_only=True)
+    except OSError:
+        return SentenceTransformer(name, device=device)
 
 
 def _get_model():
     global _model
     if _model is None:
-        # Tenta só o cache local primeiro: evita a checagem de versão no
-        # Hugging Face Hub a cada execução. Sem cache (primeira vez, ou
-        # MODEL_NAME trocado), cai no carregamento normal, que baixa o modelo.
-        try:
-            _model = SentenceTransformer(MODEL_NAME, local_files_only=True)
-        except OSError:
-            _model = SentenceTransformer(MODEL_NAME)
+        _model = load_model()
     return _model
 
 
+def open_collection(chroma_dir: str | Path, name: str = COLLECTION_NAME):
+    """Abre (ou cria) uma coleção persistente do Chroma com distância cosseno."""
+    client = chromadb.PersistentClient(
+        path=str(chroma_dir),
+        settings=Settings(anonymized_telemetry=False),
+    )
+    return client.get_or_create_collection(name=name, metadata={"hnsw:space": "cosine"})
+
+
 def _get_collection():
-    global _client, _collection
+    global _collection
     if _collection is None:
-        _client = chromadb.PersistentClient(
-            path=str(CHROMA_DIR),
-            settings=Settings(anonymized_telemetry=False),
-        )
-        _collection = _client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
-        )
+        _collection = open_collection(CHROMA_DIR)
     return _collection
+
+
+def note_text(note: dict, include_title: bool = True) -> str:
+    """Texto que vai pro embedding de uma nota: título + corpo (ou só o corpo)."""
+    if include_title:
+        return f"{note['title']}\n\n{note['body']}"
+    return note["body"]
+
+
+def distance_to_score(distance: float) -> float:
+    """Converte a distância cosseno do Chroma no score mostrado na busca."""
+    return round(1 - distance, 4)
 
 
 def _parse_note(path: Path) -> dict | None:
@@ -189,7 +209,7 @@ def embed_note(path: str | Path, sync_metadata: bool = True) -> str:
     if note is None:
         raise ValueError(f"Nota inválida ou sem frontmatter: {path}")
 
-    text_to_embed = f"{note['title']}\n\n{note['body']}"
+    text_to_embed = note_text(note)
 
     model = _get_model()
     embedding = model.encode(text_to_embed).tolist()
@@ -243,7 +263,7 @@ def search(query: str, n_results: int = 5, filter_type: str = None) -> list[dict
                 "title": results["metadatas"][0][i]["title"],
                 "filename": results["metadatas"][0][i]["filename"],
                 "type": results["metadatas"][0][i]["type"],
-                "score": round(1 - results["distances"][0][i], 4),
+                "score": distance_to_score(results["distances"][0][i]),
                 "excerpt": results["documents"][0][i][:200],
             }
         )
