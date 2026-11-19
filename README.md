@@ -19,13 +19,22 @@ Personal knowledge base with semantic search. Notes are stored as Markdown in an
 
 ## Setup
 
+Requires [uv](https://docs.astral.sh/uv/).
+
 ```bash
-uv venv --python 3.12 .venv
-uv pip install -r requirements.txt
+make setup   # uv sync (creates .venv, Python 3.12) + generates TAGS.md
+make demo    # indexes the example notes in vault/examples and runs a search
 ```
 
 > The deps (`torch` via `sentence-transformers`) lack wheels for very new Python
-> releases, so the venv pins 3.12. Run the scripts with `.venv/bin/python3`.
+> releases, so the project pins 3.12. Run the scripts with `.venv/bin/python3`.
+
+`vault/examples/` has a few public sample notes. `make demo` indexes them into a
+separate store (`chroma_demo/`), so it never mixes with your own notes in `vault/`.
+Paths and model can be overridden with `DENNOU_VAULT_DIR`, `DENNOU_CHROMA_DIR`,
+`DENNOU_TAGS_FILE` and `DENNOU_MODEL`.
+
+Dev: `make lint`, `make format`, `make test`.
 
 Open `vault/` as an Obsidian vault.
 
@@ -123,6 +132,8 @@ person/machine.
 
 ### Run as a service (systemd, user)
 
+The unit assumes the repo at `~/dennou` (edit the `%h/dennou` paths otherwise).
+
 ```bash
 mkdir -p ~/.config/systemd/user
 cp dennou-bot.service ~/.config/systemd/user/
@@ -150,6 +161,7 @@ journalctl --user -u dennou-bot -f      # logs
 ```
 dennou/
 ├── vault/          # Markdown notes (Obsidian vault)
+│   └── examples/   # public sample notes (used by make demo)
 ├── chroma_db/      # Vector database (gitignored)
 ├── embed.py        # Embedding and search pipeline
 ├── bot.py          # Telegram bot (headless agent bridge)
