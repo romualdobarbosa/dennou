@@ -1,0 +1,60 @@
+{"id": "q001", "query": "qual a diferença entre WHERE e HAVING no SQL", "kind": "literal", "relevant": {"20260201000022": 2, "20260201000023": 2, "20260201000024": 1, "20260201000040": 1}}
+{"id": "q002", "query": "como desfazer um commit que já foi enviado pro remoto usando git revert", "kind": "literal", "relevant": {"20260201000043": 2, "20260201000042": 1}}
+{"id": "q003", "query": "diferença entre git reset --soft, --mixed e --hard", "kind": "literal", "relevant": {"20260201000042": 2, "20260201000044": 1}}
+{"id": "q004", "query": "como tirar um arquivo do staging com git restore --staged", "kind": "literal", "relevant": {"20260201000044": 2, "20260201000042": 1}}
+{"id": "q005", "query": "list comprehension com if para filtrar elementos em Python", "kind": "literal", "relevant": {"20260201000005": 2, "20260201000001": 1}}
+{"id": "q006", "query": "como criar uma tupla com um único elemento em Python", "kind": "literal", "relevant": {"20260201000002": 2, "20260201000001": 1}}
+{"id": "q007", "query": "o que significa chmod 755", "kind": "literal", "relevant": {"20260201000061": 2, "20260201000063": 1}}
+{"id": "q008", "query": "chown recursivo para mudar dono e grupo de uma pasta", "kind": "literal", "relevant": {"20260201000062": 2, "20260201000061": 1}}
+{"id": "q009", "query": "LEFT JOIN traz as linhas sem correspondência com NULL", "kind": "literal", "relevant": {"20260201000026": 2, "20260201000025": 1, "20260201000030": 1}}
+{"id": "q010", "query": "como criar e ativar um ambiente virtual com python -m venv", "kind": "literal", "relevant": {"20260201000012": 2, "20260201000011": 1}}
+{"id": "q011", "query": "criar repositório git com SHA-256 usando --object-format", "kind": "literal", "relevant": {"20260201000056": 2}}
+{"id": "q012", "query": "recuperar commit perdido depois de um reset --hard com git reflog", "kind": "literal", "relevant": {"20260201000049": 2, "20260201000042": 1}}
+{"id": "q013", "query": "find com -exec para apagar arquivos com mais de 30 dias", "kind": "literal", "relevant": {"20260201000065": 2}}
+{"id": "q014", "query": "redirecionar stderr para stdout com 2>&1", "kind": "literal", "relevant": {"20260201000066": 2, "20260201000076": 1}}
+{"id": "q015", "query": "diferença entre a forma normal de Boyce-Codd (FNBC) e a terceira forma normal", "kind": "literal", "relevant": {"20260201000036": 2}}
+{"id": "q016", "query": "erro column must appear in the GROUP BY clause or be used in an aggregate function", "kind": "literal", "relevant": {"20260201000038": 2, "20260201000024": 1}}
+{"id": "q017", "query": "decorator em Python e para que serve functools.wraps", "kind": "literal", "relevant": {"20260201000007": 2}}
+{"id": "q018", "query": "git cherry-pick de um commit de outro branch", "kind": "literal", "relevant": {"20260201000050": 2}}
+{"id": "q019", "query": "usar git bisect para encontrar o commit que introduziu um bug", "kind": "literal", "relevant": {"20260201000051": 2}}
+{"id": "q020", "query": "diferença entre kill -9 SIGKILL e SIGTERM", "kind": "literal", "relevant": {"20260201000067": 2}}
+{"id": "q021", "query": "gerar chave ssh ed25519 com ssh-keygen e copiar com ssh-copy-id", "kind": "literal", "relevant": {"20260201000069": 2, "20260201000070": 1}}
+{"id": "q022", "query": "sys._is_gil_enabled e o build free-threaded do Python 3.13", "kind": "literal", "relevant": {"20260201000013": 2}}
+{"id": "q023", "query": "por que LAST_VALUE na window function retorna o valor da linha atual", "kind": "literal", "relevant": {"20260201000027": 2}}
+{"id": "q024", "query": "loginctl enable-linger para serviço systemd de usuário", "kind": "literal", "relevant": {"20260201000068": 2}}
+{"id": "q025", "query": "git commit --fixup com git rebase --autosquash", "kind": "literal", "relevant": {"20260201000045": 2, "20260201000041": 1}}
+{"id": "q026", "query": "voltei o projeto pra uma versão antiga e sumiu o trabalho que eu tinha feito ontem, tem como trazer de volta?", "kind": "paraphrase", "relevant": {"20260201000049": 2, "20260201000042": 1}}
+{"id": "q027", "query": "toda vez que chamo minha função, aquela lista que deixei vazia na definição já vem com os itens das chamadas anteriores", "kind": "paraphrase", "relevant": {"20260201000009": 2}}
+{"id": "q028", "query": "dividi um cálculo pesado em várias linhas de execução paralelas no Python e não ganhou velocidade nenhuma, por quê?", "kind": "paraphrase", "relevant": {"20260201000013": 2}}
+{"id": "q029", "query": "tenho uma pasta compartilhada onde todo mundo grava, mas não quero que um usuário consiga apagar o que outro criou", "kind": "paraphrase", "relevant": {"20260201000063": 2, "20260201000061": 1}}
+{"id": "q030", "query": "quero que um script rode sozinho toda madrugada às 3h sem eu precisar lembrar", "kind": "paraphrase", "relevant": {"20260201000076": 2}}
+{"id": "q031", "query": "o computador diz que acabou o espaço, mas quando olho ainda tem gigas sobrando", "kind": "paraphrase", "relevant": {"20260201000079": 2, "20260201000074": 1}}
+{"id": "q032", "query": "como guardar umas mudanças pela metade pra trocar de tarefa sem registrar nada no histórico", "kind": "paraphrase", "relevant": {"20260201000048": 2, "20260201000060": 1}}
+{"id": "q033", "query": "como dar uma posição 1, 2, 3 pra cada venda dentro do grupo de cada vendedor, sem perder as linhas individuais?", "kind": "paraphrase", "relevant": {"20260201000027": 2, "20260201000024": 1}}
+{"id": "q034", "query": "a consulta tá demorando muito, como descubro o que o banco está fazendo por baixo dos panos?", "kind": "paraphrase", "relevant": {"20260201000029": 2, "20260201000028": 1}}
+{"id": "q035", "query": "como fazer uma função que vai entregando os valores um de cada vez, sem montar tudo na memória antes", "kind": "paraphrase", "relevant": {"20260201000006": 2, "20260201000005": 1}}
+{"id": "q036", "query": "duas pessoas sacando dinheiro da mesma conta no mesmo instante: como o banco de dados evita que o valor final fique errado?", "kind": "paraphrase", "relevant": {"20260201000033": 2}}
+{"id": "q037", "query": "instalei um programa, ele funciona se eu digito o caminho inteiro, mas só pelo nome o terminal diz que não existe", "kind": "paraphrase", "relevant": {"20260201000071": 2, "20260201000072": 1}}
+{"id": "q038", "query": "tentei mandar meu código pro servidor e ele recusou, dizendo que tem coisa nova lá que eu não tenho aqui", "kind": "paraphrase", "relevant": {"20260201000055": 2, "20260201000058": 1}}
+{"id": "q039", "query": "quero que dois nomes de arquivo mostrem o mesmo conteúdo, tipo um atalho, e que mudando um mude o outro", "kind": "paraphrase", "relevant": {"20260201000078": 2}}
+{"id": "q040", "query": "como deixar claro no histórico que uma alteração vai quebrar quem usa a versão antiga da minha biblioteca", "kind": "paraphrase", "relevant": {"20260201000059": 2}}
+{"id": "q041", "query": "how do I undo my last commit but keep the changes", "kind": "cross_lingual", "relevant": {"20260201000042": 2, "20260201000041": 1, "20260201000043": 1}}
+{"id": "q042", "query": "what is the difference between a list and a tuple in Python", "kind": "cross_lingual", "relevant": {"20260201000001": 2, "20260201000002": 2}}
+{"id": "q043", "query": "how to find which process is using the most memory and stop it", "kind": "cross_lingual", "relevant": {"20260201000067": 2}}
+{"id": "q044", "query": "what is the default transaction isolation level in MySQL InnoDB", "kind": "cross_lingual", "relevant": {"20260201000033": 2}}
+{"id": "q045", "query": "why does the percent sign break my command in crontab", "kind": "cross_lingual", "relevant": {"20260201000076": 2}}
+{"id": "q046", "query": "why does sys.getrefcount return one more than I expect", "kind": "cross_lingual", "relevant": {"20260201000017": 2}}
+{"id": "q047", "query": "what does detached HEAD mean in git and how do I keep my commits", "kind": "cross_lingual", "relevant": {"20260201000053": 2, "20260201000049": 1}}
+{"id": "q048", "query": "how to handle several exceptions raised together with except star in Python 3.11", "kind": "cross_lingual", "relevant": {"20260201000020": 2}}
+{"id": "q049", "query": "how to prevent SQL injection when running queries from Python", "kind": "cross_lingual", "relevant": {"20260201000037": 2}}
+{"id": "q050", "query": "how to replace a string in every line of a file from the command line", "kind": "cross_lingual", "relevant": {"20260201000077": 2}}
+{"id": "q051", "query": "como criar um Dockerfile multi-stage para diminuir a imagem", "kind": "no_answer", "relevant": {}}
+{"id": "q052", "query": "o que é ownership e borrowing em Rust", "kind": "no_answer", "relevant": {}}
+{"id": "q053", "query": "como fazer requisições HTTP assíncronas com aiohttp", "kind": "no_answer", "relevant": {}}
+{"id": "q054", "query": "receita de pão de queijo", "kind": "no_answer", "relevant": {}}
+{"id": "q055", "query": "como configurar replicação no PostgreSQL", "kind": "no_answer", "relevant": {}}
+{"id": "q056", "query": "how do I set up a Kubernetes ingress", "kind": "no_answer", "relevant": {}}
+{"id": "q057", "query": "como configurar o Git LFS para versionar arquivos grandes", "kind": "no_answer", "relevant": {}}
+{"id": "q058", "query": "como montar um pendrive no Linux com o comando mount", "kind": "no_answer", "relevant": {}}
+{"id": "q059", "query": "qual o melhor horário do dia pra regar plantas", "kind": "no_answer", "relevant": {}}
+{"id": "q060", "query": "como usar groupby e agg no pandas", "kind": "no_answer", "relevant": {}}
