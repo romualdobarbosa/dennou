@@ -8,6 +8,9 @@ __pycache__/
 .bot_session
 .venv/
 
+# Log das buscas (consultas pessoais) — nunca versionar
+logs/
+
 # Notas pessoais — ficam só na máquina
 vault/*.md
 TAGS.md

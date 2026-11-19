@@ -4,9 +4,12 @@ Insere ou atualiza uma nota no ChromaDB com base no seu frontmatter e body.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import chromadb
@@ -36,6 +39,10 @@ CHUNK_WORD_OVERLAP = 0.2
 DEFAULT_SCORE_THRESHOLD = 0.55
 SCORE_THRESHOLD = float(os.environ.get("DENNOU_SCORE_THRESHOLD") or DEFAULT_SCORE_THRESHOLD)
 MODEL_NAME = os.environ.get("DENNOU_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+
+# Log das buscas do CLI (JSONL, uma linha por busca). São consultas pessoais:
+# logs/ fica no .gitignore. DENNOU_LOG_FILE troca o caminho; vazio ou "off" desliga.
+DEFAULT_LOG_FILE = ROOT / "logs" / "search.jsonl"
 
 # Paleta de cores para novas tags (RGB decimal). Cores visualmente distintas.
 _COLOR_PALETTE = [
@@ -530,6 +537,48 @@ def sync_vault():
     print(f"\n{len(notes)} nota(s) processada(s).")
 
 
+def log_file() -> Path | None:
+    """Arquivo do log de buscas, ou None se desligado (DENNOU_LOG_FILE vazio/off)."""
+    raw = os.environ.get("DENNOU_LOG_FILE")
+    if raw is None:
+        return DEFAULT_LOG_FILE
+    if raw.strip().lower() in ("", "0", "off", "false", "no"):
+        return None
+    return Path(raw)
+
+
+def log_search(
+    query: str,
+    results: list[dict],
+    latency_ms: float,
+    k: int,
+    filter_type: str | None = None,
+    filter_tag: str | None = None,
+) -> None:
+    """Anexa uma linha JSONL com a busca. Falha no log não derruba a busca."""
+    path = log_file()
+    if path is None:
+        return
+    record = {
+        "ts": datetime.now(UTC).isoformat(timespec="milliseconds"),
+        "query": query,
+        "k": k,
+        "type": filter_type,
+        "tag": filter_tag,
+        "results": [{"note_id": r["id"], "score": r["score"]} for r in results],
+        "above_threshold": sum(r["relevant"] for r in results),
+        "threshold": SCORE_THRESHOLD,
+        "latency_ms": round(latency_ms, 1),
+        "model": MODEL_NAME,
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"aviso: não deu pra gravar o log de busca em {path}: {e}", file=sys.stderr)
+
+
 def _warn_if_old_format() -> None:
     collection = _get_collection()
     if not is_current_format(collection):
@@ -565,12 +614,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Nota embedada com id: {note_id}")
     elif args.cmd == "search":
         _warn_if_old_format()
+        query = " ".join(args.query)
+        _get_model()  # carregar o modelo fica fora da latência medida
+        t0 = time.perf_counter()
         results = search(
-            " ".join(args.query),
-            n_results=args.k,
-            filter_type=args.filter_type,
-            filter_tag=args.filter_tag,
+            query, n_results=args.k, filter_type=args.filter_type, filter_tag=args.filter_tag
         )
+        latency_ms = (time.perf_counter() - t0) * 1000
+        log_search(query, results, latency_ms, args.k, args.filter_type, args.filter_tag)
         if not results:
             print("Nenhum resultado encontrado.")
         for r in results:
