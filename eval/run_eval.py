@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import embed  # noqa: E402
+from eval import hybrid as h  # noqa: E402
 from eval import metrics as m  # noqa: E402
 
 EVAL_DIR = ROOT / "eval"
@@ -72,6 +73,15 @@ QUICK_QUERIES = [
     "q042",
     "q050",
 ]
+
+# Experimento de busca híbrida e rerank (em cima da config de produção).
+RRF_K = 60
+HYBRID_ALPHAS = [0.5, 0.7, 0.9]
+RERANK_DEPTH = 20
+RERANKERS = {
+    "mminilm": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "bge-reranker": "BAAI/bge-reranker-v2-m3",
+}
 
 # Experimento do campo related.
 RELATED_TOP_N = 3
@@ -373,6 +383,157 @@ def related_experiment(per_query, notes, manifest) -> dict:
     return out
 
 
+# --------------------------------------------------------------------------- híbrida e rerank
+
+
+def hybrid_experiment(per_query, notes, manifest, device, cache, rerankers) -> dict:
+    """
+    Em cima da config de produção (ranking vetorial completo de cada pergunta):
+    - bm25: só BM25 sobre o texto da nota (título + corpo, sem ## Links);
+    - rrf: Reciprocal Rank Fusion do ranking vetorial com o do BM25;
+    - weighted-a: alpha * cosseno + (1 - alpha) * BM25 normalizado;
+    - rerank-*: cross-encoder reordena o top-RERANK_DEPTH da base (vetorial ou
+      a melhor híbrida); score da nota = maior score entre os chunks dela.
+    O corte "gate" é sempre o cosseno de produção (score >= SCORE_THRESHOLD),
+    então o falso positivo não muda; só a ordem das notas que passam muda. Pro
+    rerank também sai a curva de corte no score do próprio reranker.
+    """
+    from sentence_transformers import CrossEncoder
+
+    config = parse_config(PRODUCTION_CONFIG)
+    texts = {n["id"]: embed.note_text(n, True, config["keep_links"]) for n in notes}
+    t0 = time.perf_counter()
+    bm25 = h.BM25(texts)
+    bm25_index_s = time.perf_counter() - t0
+
+    model = cache.get(MODELS[config["model"]]["name"]) or embed.load_model(
+        MODELS[config["model"]]["name"], device=device
+    )
+    chunks = {n["id"]: embed.note_chunks(n, model, keep_links=config["keep_links"]) for n in notes}
+
+    bm25_scores, bm25_ms = {}, []
+    for pq in per_query:
+        t0 = time.perf_counter()
+        bm25_scores[pq["query"]["id"]] = bm25.scores(pq["query"]["query"])
+        bm25_ms.append((time.perf_counter() - t0) * 1000)
+
+    variants: dict[str, dict] = {}
+
+    def add_variant(name, score_fn, extra_ms=None, own=True):
+        """score_fn(pq) -> scores por nota; own: curva de corte no próprio score."""
+        scores = {pq["query"]["id"]: score_fn(pq) for pq in per_query}
+        rankings = {qid: h.ranking(s) for qid, s in scores.items()}
+        own_scores = scores if own else None
+        variants[name] = evaluate_variant(per_query, rankings, manifest, extra_ms or [], own_scores)
+        return rankings
+
+    # BM25 e RRF não ficam em [0, 1], então não têm curva de corte própria.
+    vector = add_variant("vector", lambda pq: pq["scores"])
+    add_variant("bm25", lambda pq: bm25_scores[pq["query"]["id"]], bm25_ms, own=False)
+    hybrids = {
+        "rrf": lambda pq: h.rrf([pq["ranked"], h.ranking(bm25_scores[pq["query"]["id"]])], k=RRF_K)
+    }
+    for a in HYBRID_ALPHAS:
+        hybrids[f"weighted-{a}"] = lambda pq, a=a: h.weighted(
+            pq["scores"], bm25_scores[pq["query"]["id"]], a
+        )
+    hybrid_rankings = {
+        name: add_variant(name, fn, bm25_ms, own=name != "rrf") for name, fn in hybrids.items()
+    }
+    best_hybrid = max(
+        hybrids,
+        key=lambda n: (
+            variants[n]["overall"]["ndcg@5"],
+            variants[n]["overall"]["recall@5"],
+        ),
+    )
+
+    bases = {"vector": vector, best_hybrid: hybrid_rankings[best_hybrid]}
+    rerank_meta = {}
+    for rname in rerankers:
+        model_name = RERANKERS[rname]
+        seed_everything()
+        t0 = time.perf_counter()
+        ce = CrossEncoder(model_name, device=device)
+        load_s = time.perf_counter() - t0
+        ce.predict([("aquecimento", "aquecimento")])
+        rerank_meta[rname] = {"model": model_name, "load_s": round(load_s, 2)}
+        for base_name, base in bases.items():
+            ms, own, rankings = [], {}, {}
+            for pq in per_query:
+                qid = pq["query"]["id"]
+                cand = base[qid][:RERANK_DEPTH]
+                pairs = [(pq["query"]["query"], c) for n in cand for c in chunks[n]]
+                t0 = time.perf_counter()
+                raw = ce.predict(pairs, batch_size=64)
+                ms.append((time.perf_counter() - t0) * 1000)
+                score, i = {}, 0
+                for n in cand:
+                    k = len(chunks[n])
+                    score[n] = float(max(raw[i : i + k]))
+                    i += k
+                rest = [n for n in base[qid] if n not in score]
+                rankings[qid] = h.ranking(score) + rest
+                own[qid] = {**dict.fromkeys(rest, 0.0), **score}
+            extra = (
+                ms if base_name == "vector" else [a + b for a, b in zip(ms, bm25_ms, strict=True)]
+            )
+            variants[f"rerank-{rname}@{base_name}"] = evaluate_variant(
+                per_query, rankings, manifest, extra, own
+            )
+
+    return {
+        "config": PRODUCTION_CONFIG,
+        "gate": f"cosseno >= {PRODUCTION_THRESHOLD}",
+        "rrf_k": RRF_K,
+        "rerank_depth": RERANK_DEPTH,
+        "best_hybrid": best_hybrid,
+        "bm25": {"k1": bm25.k1, "b": bm25.b, "index_s": round(bm25_index_s, 3)},
+        "rerankers": rerank_meta,
+        "variants": variants,
+    }
+
+
+def evaluate_variant(per_query, rankings, manifest, extra_ms, own_scores=None) -> dict:
+    """Métricas de um ranking alternativo; o gate usa o cosseno de produção."""
+    tail = set(manifest["tail_answer_queries"])
+    rows, answerable, no_answer, own_ans, own_no = [], [], [], [], []
+    for pq in per_query:
+        q = pq["query"]
+        ranked, cos = rankings[q["id"]], pq["scores"]
+        if q["kind"] == "no_answer":
+            # Gate no cosseno: FP = alguma nota passa do corte, seja qual for a ordem.
+            no_answer.append((pq["ranked"], cos))
+            if own_scores:
+                own_no.append((ranked, own_scores[q["id"]]))
+            continue
+        rows.append({**query_metrics(ranked, q["relevant"]), "kind": q["kind"], "id": q["id"]})
+        answerable.append((ranked, cos, q["relevant"]))
+        if own_scores:
+            own_ans.append((ranked, own_scores[q["id"]], q["relevant"]))
+    out = {
+        "overall": aggregate(rows),
+        "by_kind": {
+            k: aggregate([r for r in rows if r["kind"] == k])
+            for k in ("literal", "paraphrase", "cross_lingual")
+        },
+        "tail_answer": aggregate([r for r in rows if r["id"] in tail]),
+        "at_production_gate": m.threshold_curve(
+            answerable, no_answer, [PRODUCTION_THRESHOLD], k=TOP_K
+        )[0],
+        "extra_ms_p50": round(m.percentile(extra_ms, 50), 2) if extra_ms else 0.0,
+        "extra_ms_p95": round(m.percentile(extra_ms, 95), 2) if extra_ms else 0.0,
+        "misses_at_5": [r["id"] for r in rows if r["recall@5"] == 0],
+    }
+    if own_scores:
+        curve = m.threshold_curve(own_ans, own_no, THRESHOLDS, k=TOP_K)
+        out["own_threshold"] = {
+            "curve": curve,
+            "suggested": m.suggest_threshold(curve, MAX_FP_RATE),
+        }
+    return out
+
+
 # --------------------------------------------------------------------------- links
 
 
@@ -414,7 +575,11 @@ def fmt(x: float) -> str:
 
 
 def write_summary(
-    results: dict[str, dict], related: dict | None, links: dict | None, path: Path
+    results: dict[str, dict],
+    related: dict | None,
+    links: dict | None,
+    path: Path,
+    hybrid: dict | None = None,
 ) -> None:
     names = [n for n in all_configs() if n in results]
     first = results[names[0]]["meta"]
@@ -496,6 +661,37 @@ def write_summary(
                 f"| {fmt(v['tail_answer']['recall@5'])} | {ap['fp_rate']:.0%} "
                 f"| {fmt(ap['recall'])} | {v['items_indexed']} |"
             )
+    if hybrid:
+        t_prod_s = f"{PRODUCTION_THRESHOLD:g}"
+        lines += [
+            "",
+            f"## Busca híbrida e rerank ({hybrid['config']})",
+            "",
+            "Rankings alternativos em cima do vetorial de produção. `bm25` é só lexical; "
+            f"`rrf` funde vetorial e BM25 (k={hybrid['rrf_k']}); `weighted-a` soma "
+            "a × cosseno + (1 − a) × BM25 normalizado; `rerank-X@base` reordena o "
+            f"top-{hybrid['rerank_depth']} da base com um cross-encoder. O corte continua no "
+            f"cosseno ({hybrid['gate']}), então o FP fica igual ao da produção; a coluna "
+            '"t próprio" é o corte no score do reranker com FP ≤ 10%. Latência extra = '
+            "BM25 + rerank por pergunta, somada à do vetorial.",
+            "",
+            f"| variante | R@1 | R@5 | MRR | nDCG@5 | R@5 cauda | R@5 com t={t_prod_s} "
+            "| t próprio (R@5 / FP) | +p50 ms | +p95 ms | erra no top-5 |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for name, v in hybrid["variants"].items():
+            o, ap = v["overall"], v["at_production_gate"]
+            own = "—"
+            sug = (v.get("own_threshold") or {}).get("suggested")
+            if sug:
+                own = f"{sug['threshold']:.2f} ({fmt(sug['recall'])} / {sug['fp_rate']:.0%})"
+            label = f"**{name}**" if name == "vector" else name
+            lines.append(
+                f"| {label} | {fmt(o['recall@1'])} | {fmt(o['recall@5'])} | {fmt(o['mrr'])} "
+                f"| {fmt(o['ndcg@5'])} | {fmt(v['tail_answer']['recall@5'])} "
+                f"| {fmt(ap['recall'])} | {own} | {v['extra_ms_p50']:.1f} "
+                f"| {v['extra_ms_p95']:.1f} | {', '.join(v['misses_at_5']) or '—'} |"
+            )
     if related:
         b = related["baseline"]
         lines += [
@@ -541,6 +737,16 @@ def main() -> int:
     ap.add_argument("--min-recall5", type=float, default=None, help="mínimo do --quick")
     ap.add_argument("--no-related", action="store_true", help="pula o experimento do related")
     ap.add_argument("--no-links", action="store_true", help="pula o experimento da seção Links")
+    ap.add_argument(
+        "--no-hybrid", action="store_true", help="pula o experimento de híbrida e rerank"
+    )
+    ap.add_argument(
+        "--rerankers",
+        nargs="*",
+        choices=list(RERANKERS),
+        default=list(RERANKERS),
+        help="rerankers do experimento híbrido (o bge-reranker leva ~1 h em CPU)",
+    )
     args = ap.parse_args()
 
     notes, queries = load_notes(), load_queries()
@@ -602,6 +808,16 @@ def main() -> int:
             json.dumps(links, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
 
+    hybrid = None
+    if not args.no_hybrid and PRODUCTION_CONFIG in results:
+        print(f"== {PRODUCTION_CONFIG} híbrida e rerank", flush=True)
+        hybrid = hybrid_experiment(
+            rankings[PRODUCTION_CONFIG], notes, manifest, args.device, cache, args.rerankers
+        )
+        (args.out / "hybrid_rerank.json").write_text(
+            json.dumps(hybrid, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+
     # O summary sempre reflete todos os JSONs gravados em --out.
     all_results = {}
     for n in all_configs():
@@ -612,7 +828,9 @@ def main() -> int:
         related = json.loads((args.out / "related_expansion.json").read_text(encoding="utf-8"))
     if links is None and (args.out / "links_section.json").exists():
         links = json.loads((args.out / "links_section.json").read_text(encoding="utf-8"))
-    write_summary(all_results, related, links, args.out / "summary.md")
+    if hybrid is None and (args.out / "hybrid_rerank.json").exists():
+        hybrid = json.loads((args.out / "hybrid_rerank.json").read_text(encoding="utf-8"))
+    write_summary(all_results, related, links, args.out / "summary.md", hybrid)
     out = args.out.resolve()
     print(f"resultados em {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
     return 0
