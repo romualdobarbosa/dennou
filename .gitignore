@@ -1,5 +1,7 @@
 chroma_db/
 __pycache__/
+.ruff_cache/
+.pytest_cache/
 *.pyc
 .env
 .bot_session

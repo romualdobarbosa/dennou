@@ -1,0 +1,35 @@
+[project]
+name = "dennou"
+version = "0.1.0"
+description = "Knowledge base pessoal: notas markdown num vault Obsidian com busca semântica (RAG)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+# bot.py só usa a stdlib; as deps abaixo são do embed.py.
+dependencies = [
+    "chromadb==1.5.9",
+    "sentence-transformers==5.5.1",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.uv]
+# Scripts soltos na raiz, não um pacote instalável.
+package = false
+
+[tool.ruff]
+line-length = 100
+# Notas são conteúdo, não código: os blocos de exemplo ficam como foram escritos.
+extend-exclude = ["vault"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
