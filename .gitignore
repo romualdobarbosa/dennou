@@ -1,4 +1,5 @@
 chroma_db/
+chroma_demo/
 __pycache__/
 .ruff_cache/
 .pytest_cache/
