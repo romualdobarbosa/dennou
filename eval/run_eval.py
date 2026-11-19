@@ -479,7 +479,7 @@ def write_summary(
             "",
             f"## Seção `## Links` no texto embedado ({links['config']})",
             "",
-            "Os wiki-links do fim da nota viram um chunk só de nomes de outras notas. "
+            "Os wiki-links do fim da nota são nomes de outras notas, não conteúdo. "
             f"Produção hoje: {'com' if links['production_keeps_links'] else 'sem'} a seção.",
             "",
             f"| variante | R@5 | nDCG@5 | MRR | R@5 cauda | FP@{t_prod_s} | R@5 com t={t_prod_s} "

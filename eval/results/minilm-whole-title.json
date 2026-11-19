@@ -166,10 +166,10 @@
     "criterion": "maior Recall@5 (só notas com score >= t) com FP <= 10%"
   },
   "timing": {
-    "query_p50_ms": 12.84,
-    "query_p95_ms": 15.55,
-    "index_total_s": 3.238,
-    "model_load_s": 0.584
+    "query_p50_ms": 14.1,
+    "query_p95_ms": 25.6,
+    "index_total_s": 3.379,
+    "model_load_s": 0.583
   },
   "queries": [
     {
@@ -1991,6 +1991,7 @@
     "max_seq_length": 128,
     "embedding_dim": 384,
     "include_title": true,
+    "keep_links_section": false,
     "chunking": {
       "mode": "whole",
       "max_tokens": null,
@@ -2002,8 +2003,8 @@
     "long_notes_over_max_seq_length": 12,
     "vault": "eval/vault",
     "env": {
-      "date": "2026-11-19T04:03:47+00:00",
-      "commit": "4eda628",
+      "date": "2026-11-19T04:22:47+00:00",
+      "commit": "a91aac4",
       "device": "cpu",
       "cpu": "13th Gen Intel(R) Core(TM) i5-13420H",
       "torch_threads": 8,
