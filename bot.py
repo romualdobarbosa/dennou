@@ -9,6 +9,8 @@ quando pedido), e devolve a resposta. Travado pelo chat_id do dono.
 Long polling via stdlib (sem dependências novas). Roda no próprio PC para
 salvar as notas localmente.
 """
+
+import contextlib
 import json
 import os
 import subprocess
@@ -32,9 +34,9 @@ ALLOWED_TOOLS = [
     "Grep",
 ]
 
-CLAUDE_TIMEOUT = 300          # segundos por mensagem
-TELEGRAM_MAX = 4096          # limite de caracteres por mensagem do Telegram
-POLL_TIMEOUT = 60            # long polling: quanto o getUpdates segura a conexão
+CLAUDE_TIMEOUT = 300  # segundos por mensagem
+TELEGRAM_MAX = 4096  # limite de caracteres por mensagem do Telegram
+POLL_TIMEOUT = 60  # long polling: quanto o getUpdates segura a conexão
 
 # Guarda o session_id da conversa para dar continuidade entre mensagens
 # (sem isso cada `claude -p` começa do zero e "salva isso" perde o contexto).
@@ -86,15 +88,14 @@ def tg(method: str, **params):
     url = f"{API}/{method}"
     data = urllib.parse.urlencode(params).encode()
     req = urllib.request.Request(
-        url, data=data,
+        url,
+        data=data,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     with urllib.request.urlopen(req, timeout=POLL_TIMEOUT + 10) as resp:
         payload = json.load(resp)
     if not payload.get("ok"):
-        raise RuntimeError(
-            f"Telegram API {method} falhou: {payload.get('description')}"
-        )
+        raise RuntimeError(f"Telegram API {method} falhou: {payload.get('description')}")
     return payload
 
 
@@ -102,23 +103,31 @@ def send(chat_id, text: str) -> None:
     """Envia texto ao usuário, quebrando em pedaços se passar do limite."""
     text = text or "⚠️ (resposta vazia)"
     for i in range(0, len(text), TELEGRAM_MAX):
-        tg("sendMessage", chat_id=chat_id, text=text[i:i + TELEGRAM_MAX])
+        tg("sendMessage", chat_id=chat_id, text=text[i : i + TELEGRAM_MAX])
 
 
 def _run_claude(message: str, session_id: str | None):
     """Roda o `claude -p`, retomando `session_id` se houver. Devolve o proc
     ou None em timeout."""
     cmd = [
-        "claude", "-p", message,
-        "--output-format", "json",
-        "--model", MODEL,
-        "--allowedTools", *ALLOWED_TOOLS,
+        "claude",
+        "-p",
+        message,
+        "--output-format",
+        "json",
+        "--model",
+        MODEL,
+        "--allowedTools",
+        *ALLOWED_TOOLS,
     ]
     if session_id:
         cmd += ["--resume", session_id]
     try:
         return subprocess.run(
-            cmd, cwd=PROJECT_DIR, capture_output=True, text=True,
+            cmd,
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
             timeout=CLAUDE_TIMEOUT,
         )
     except subprocess.TimeoutExpired:
@@ -158,8 +167,7 @@ def ask_agent(message: str) -> str:
 
 def main() -> None:
     if not TOKEN or not OWNER_ID:
-        sys.exit("Defina TELEGRAM_BOT_TOKEN e TELEGRAM_OWNER_ID no .env "
-                 "(veja .env.example).")
+        sys.exit("Defina TELEGRAM_BOT_TOKEN e TELEGRAM_OWNER_ID no .env (veja .env.example).")
 
     print(f"dennou-bot iniciado. modelo={MODEL} dono={OWNER_ID}", flush=True)
     offset = None
@@ -187,8 +195,7 @@ def main() -> None:
             print(f"[msg] {text[:80]}", flush=True)
             if text.strip().lower() in ("/novo", "/reset"):
                 clear_session()
-                send(chat_id, "🧹 Conversa reiniciada. A próxima mensagem "
-                              "começa do zero.")
+                send(chat_id, "🧹 Conversa reiniciada. A próxima mensagem começa do zero.")
                 continue
             try:
                 tg("sendChatAction", chat_id=chat_id, action="typing")
@@ -196,10 +203,8 @@ def main() -> None:
                 send(chat_id, reply)
             except Exception as e:  # noqa: BLE001
                 print(f"[handler] erro: {e}", flush=True)
-                try:
+                with contextlib.suppress(Exception):
                     send(chat_id, f"⚠️ Erro interno: {e}")
-                except Exception:
-                    pass
 
 
 if __name__ == "__main__":

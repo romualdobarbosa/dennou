@@ -19,10 +19,26 @@ MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
 # Paleta de cores para novas tags (RGB decimal). Cores visualmente distintas.
 _COLOR_PALETTE = [
-    0xe74c3c, 0xf39c12, 0x1a73e8, 0xd35400, 0x27ae60,
-    0x2980b9, 0x8e44ad, 0x16a085, 0xc0392b, 0xf1c40f,
-    0x34495e, 0x7f8c8d, 0xa29bfe, 0xfd79a8, 0x00b894,
-    0xe17055, 0x6c5ce7, 0xfdcb6e, 0x55efc4, 0xd63031,
+    0xE74C3C,
+    0xF39C12,
+    0x1A73E8,
+    0xD35400,
+    0x27AE60,
+    0x2980B9,
+    0x8E44AD,
+    0x16A085,
+    0xC0392B,
+    0xF1C40F,
+    0x34495E,
+    0x7F8C8D,
+    0xA29BFE,
+    0xFD79A8,
+    0x00B894,
+    0xE17055,
+    0x6C5CE7,
+    0xFDCB6E,
+    0x55EFC4,
+    0xD63031,
 ]
 
 _model = None
@@ -131,7 +147,9 @@ def sync_graph_colors() -> int:
     palette = [c for c in _COLOR_PALETTE if c not in used_colors] or list(_COLOR_PALETTE)
 
     for tag in new_tags:
-        color = palette.pop(0) if palette else _COLOR_PALETTE[len(color_groups) % len(_COLOR_PALETTE)]
+        color = (
+            palette.pop(0) if palette else _COLOR_PALETTE[len(color_groups) % len(_COLOR_PALETTE)]
+        )
         color_groups.append({"query": f"tag:#{tag}", "color": {"a": 1, "rgb": color}})
 
     graph["colorGroups"] = color_groups
@@ -175,14 +193,16 @@ def embed_note(path: str | Path) -> str:
         ids=[note["id"]],
         embeddings=[embedding],
         documents=[text_to_embed],
-        metadatas=[{
-            "title": note["title"],
-            "type": note["type"],
-            "tags": note["tags"],
-            "area": note["area"],
-            "created": note["created"],
-            "filename": note["filename"],
-        }],
+        metadatas=[
+            {
+                "title": note["title"],
+                "type": note["type"],
+                "tags": note["tags"],
+                "area": note["area"],
+                "created": note["created"],
+                "filename": note["filename"],
+            }
+        ],
     )
 
     sync_graph_colors()
@@ -210,14 +230,16 @@ def search(query: str, n_results: int = 5, filter_type: str = None) -> list[dict
 
     output = []
     for i in range(len(results["ids"][0])):
-        output.append({
-            "id": results["ids"][0][i],
-            "title": results["metadatas"][0][i]["title"],
-            "filename": results["metadatas"][0][i]["filename"],
-            "type": results["metadatas"][0][i]["type"],
-            "score": round(1 - results["distances"][0][i], 4),
-            "excerpt": results["documents"][0][i][:200],
-        })
+        output.append(
+            {
+                "id": results["ids"][0][i],
+                "title": results["metadatas"][0][i]["title"],
+                "filename": results["metadatas"][0][i]["filename"],
+                "type": results["metadatas"][0][i]["type"],
+                "score": round(1 - results["distances"][0][i], 4),
+                "excerpt": results["documents"][0][i][:200],
+            }
+        )
 
     return output
 
@@ -256,7 +278,7 @@ if __name__ == "__main__":
 
     elif cmd == "tags":
         sync_tags()
-        print(f"TAGS.md atualizado.")
+        print("TAGS.md atualizado.")
 
     elif cmd == "add" and len(sys.argv) == 3:
         note_id = embed_note(sys.argv[2])
