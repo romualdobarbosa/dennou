@@ -34,7 +34,10 @@ separate store (`chroma_demo/`), so it never mixes with your own notes in `vault
 Paths and model can be overridden with `DENNOU_VAULT_DIR`, `DENNOU_CHROMA_DIR`,
 `DENNOU_TAGS_FILE` and `DENNOU_MODEL`.
 
-Dev: `make lint`, `make format`, `make test`.
+Dev: `make lint`, `make format`, `make test`, `make eval-quick`. CI
+(`.github/workflows/ci.yml`) runs lint, tests and the `eval-quick` retrieval
+gate on every push to `main` and on pull requests. It installs the CPU build of
+torch, so it never downloads the CUDA libraries the lockfile pulls on Linux.
 
 Open `vault/` as an Obsidian vault.
 
@@ -54,12 +57,35 @@ The agent picks the right note type, fills the frontmatter, and indexes it autom
 # index a specific note
 .venv/bin/python3 embed.py add vault/20260528210249-left-join-sql.md
 
-# semantic search
+# semantic search (top 5 notes, optional filters)
 .venv/bin/python3 embed.py search "window functions"
+.venv/bin/python3 embed.py search "undo a commit" --type command --tag git -k 3
 
-# reindex entire vault
+# rebuild the whole index from scratch
 .venv/bin/python3 embed.py sync
 ```
+
+### How search works
+
+Each note is split into chunks of up to 128 tokens (the model's limit), grouping
+whole paragraphs and putting the title in front of every chunk. A note's score
+is the score of its best chunk, each note shows up once in the results, and the
+excerpt is the chunk that matched. Before this, long notes were cut at 128
+tokens and everything after that was invisible to search. I picked this setup
+with the retrieval eval in `eval/` (see `eval/results/summary.md`).
+
+Search always prints the top 5 and flags the ones under the relevance cut,
+0.55 by default (`DENNOU_SCORE_THRESHOLD`). The agent ignores those. The cut
+also came from the eval, and it only makes sense for this model and chunking.
+
+`sync` builds a new index and swaps it in at the end, so notes deleted from the
+vault drop out of it. If your `chroma_db/` was built before chunking (one vector
+per note), `search` and `add` warn about it, and one `embed.py sync` migrates it.
+
+Every CLI search appends a JSON line to `logs/search.jsonl` with the query, the
+note ids and scores, how many passed the cut, latency and model. `logs/` is
+gitignored since those are personal queries. Set `DENNOU_LOG_FILE` to another
+path, or to `off` to disable it.
 
 ## Telegram bot
 
