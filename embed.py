@@ -3,6 +3,7 @@ Pipeline de embedding para o vault de notas.
 Insere ou atualiza uma nota no ChromaDB com base no seu frontmatter e body.
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -11,11 +12,17 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
-VAULT_DIR = Path(__file__).parent / "vault"
-CHROMA_DIR = Path(__file__).parent / "chroma_db"
-GRAPH_JSON = Path(__file__).parent / "vault" / ".obsidian" / "graph.json"
+ROOT = Path(__file__).parent
+
+# Caminhos e modelo configuráveis por variável de ambiente (ex.: demo e eval
+# usam um vault e um banco separados). Os defaults são os do uso normal.
+VAULT_DIR = Path(os.environ.get("DENNOU_VAULT_DIR", ROOT / "vault"))
+CHROMA_DIR = Path(os.environ.get("DENNOU_CHROMA_DIR", ROOT / "chroma_db"))
+TAGS_MD = Path(os.environ.get("DENNOU_TAGS_FILE", ROOT / "TAGS.md"))
+# Config do Obsidian do próprio vault; se não existir, as cores não são sincronizadas.
+GRAPH_JSON = VAULT_DIR / ".obsidian" / "graph.json"
 COLLECTION_NAME = "dennou"
-MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+MODEL_NAME = os.environ.get("DENNOU_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 
 # Paleta de cores para novas tags (RGB decimal). Cores visualmente distintas.
 _COLOR_PALETTE = [
@@ -155,9 +162,6 @@ def sync_graph_colors() -> int:
     graph["colorGroups"] = color_groups
     GRAPH_JSON.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")
     return len(new_tags)
-
-
-TAGS_MD = Path(__file__).parent / "TAGS.md"
 
 
 def sync_tags() -> None:
