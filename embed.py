@@ -429,7 +429,24 @@ def _excerpt(document: str | None, title: str, size: int = 300) -> str:
     return text[:size]
 
 
-def search(query: str, n_results: int = 5, filter_type: str | None = None) -> list[dict]:
+def _where(filter_type: str | None, filter_tag: str | None) -> dict | None:
+    """Filtro do Chroma. tags é metadado de lista, filtrado com $contains."""
+    conditions = []
+    if filter_type:
+        conditions.append({"type": filter_type})
+    if filter_tag:
+        conditions.append({"tags": {"$contains": filter_tag}})
+    if len(conditions) > 1:
+        return {"$and": conditions}
+    return conditions[0] if conditions else None
+
+
+def search(
+    query: str,
+    n_results: int = 5,
+    filter_type: str | None = None,
+    filter_tag: str | None = None,
+) -> list[dict]:
     """
     Busca semântica no vault. Uma entrada por nota (o chunk de maior score),
     em ordem de score: dicts com id, title, filename, type, score, excerpt
@@ -441,7 +458,7 @@ def search(query: str, n_results: int = 5, filter_type: str | None = None) -> li
         return []
 
     query_embedding = _get_model().encode(query).tolist()
-    where = {"type": filter_type} if filter_type else None
+    where = _where(filter_type, filter_tag)
 
     # Vários chunks podem ser da mesma nota: pede mais itens que notas e
     # dobra enquanto faltar nota distinta e ainda houver item no índice.
@@ -533,6 +550,7 @@ def main(argv: list[str] | None = None) -> int:
     p_search = sub.add_parser("search", help="busca semântica")
     p_search.add_argument("query", nargs="+")
     p_search.add_argument("--type", dest="filter_type", help="só notas desse type")
+    p_search.add_argument("--tag", dest="filter_tag", help="só notas com essa tag")
     p_search.add_argument("-k", type=int, default=5, help="quantas notas (default 5)")
     args = parser.parse_args(argv)
 
@@ -547,7 +565,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Nota embedada com id: {note_id}")
     elif args.cmd == "search":
         _warn_if_old_format()
-        results = search(" ".join(args.query), n_results=args.k, filter_type=args.filter_type)
+        results = search(
+            " ".join(args.query),
+            n_results=args.k,
+            filter_type=args.filter_type,
+            filter_tag=args.filter_tag,
+        )
         if not results:
             print("Nenhum resultado encontrado.")
         for r in results:

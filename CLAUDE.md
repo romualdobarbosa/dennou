@@ -25,6 +25,7 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 
 - Antes de responder uma pergunta de conhecimento, consulte o vault com `.venv/bin/python3 embed.py search "<pergunta>"` e use as notas retornadas como contexto adicional
 - Se encontrar notas relevantes (score ≥ 0.55), incorpore o conteúdo delas na resposta e mencione o título da nota ao final. O search mostra sempre as 5 melhores e marca com "(abaixo do corte 0.55)" as que não passam; ignore essas
+- Se a pergunta for de um tipo ou tag específico, dá pra filtrar: `.venv/bin/python3 embed.py search "<pergunta>" --type command` ou `--tag git`
 - Se o vault estiver vazio ou nenhuma nota for relevante, responda normalmente sem mencionar a busca
 - Só crie uma nota se o usuário pedir explicitamente (ex: "salva isso", "cria uma nota", "anota aí")
 - Ao criar uma nota, leia o `SCHEMA.md` e o `TAGS.md` para seguir a estrutura correta
