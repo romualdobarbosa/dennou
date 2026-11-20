@@ -54,7 +54,7 @@ The old pipeline embedded title and body as one vector. `paraphrase-multilingual
 
 `embed.py search` always prints the top 5 and flags the ones below the cut, and the agent ignores those. For each config the harness sweeps the cut from 0.0 to 1.0 in steps of 0.05 and computes two things, the false positive rate on the 10 no-answer queries and Recall@5 counting only notes above the cut. The suggested cut is the one with the highest recall at no more than 10% false positives. For production that is 0.55 (Recall@5 0.740 above the cut, 10% FP). The old cut was 0.4, and it had never been measured. Scores are not comparable across models (with e5 almost everything scores above 0.7, so FP@0.55 is 100%), so the cut only holds for this model and chunking.
 
-### Two more experiments
+### Three more experiments
 
 #### Expanding results with the `related` field (not adopted)
 
@@ -71,6 +71,21 @@ Notes end with Obsidian wiki-links to other notes. Embedded, they are text made 
 
 One more English query lands in the top 5 and the false positive rate stays the same, so production now strips the section before chunking. I started this because `make demo` ranks `git commit` above `git branch` for "como criar uma branch no git", and it still does without the Links section. On those five short notes the links were never a chunk of their own, and the `git commit` example chunk mentions a feature branch.
 
+#### Hybrid search and reranking (not adopted)
+
+On top of the production ranking I tried BM25 alone, two fusions with the vector score (RRF with k = 60, and a × cosine + (1 − a) × normalized BM25 with a = 0.5, 0.7 and 0.9), and reranking the top 20 with two multilingual cross-encoders ([`hybrid_rerank.json`](eval/results/hybrid_rerank.json)). The cut stays on the cosine score, so FP@0.55 is 10% for every variant.
+
+| variant | Recall@1 | Recall@5 | MRR | Recall@5 above 0.55 | extra latency (p50) |
+|---|---|---|---|---|---|
+| **vector (production)** | 0.720 | 0.960 | 0.802 | 0.740 | 0 |
+| BM25 only | 0.820 | 0.860 | 0.842 | 0.740 | 0.1 ms |
+| RRF | 0.820 | 0.920 | 0.856 | 0.740 | 0.1 ms |
+| 0.7 × cosine + 0.3 × BM25 | 0.860 | 0.940 | 0.896 | 0.740 | 0.1 ms |
+| rerank, mmarco-mMiniLMv2-L12 | 0.880 | 0.940 | 0.907 | 0.740 | 4.5 s |
+| rerank, bge-reranker-v2-m3 | 0.880 | 0.980 | 0.918 | 0.740 | 58 s |
+
+Weighted fusion puts the right note first much more often for almost no cost, but loses an English query from the top 5, since BM25 can't match English words against Portuguese notes. bge-reranker-v2-m3 wins on every metric and takes about a minute per search on CPU. None of them changes Recall@5 above the cut, because reordering doesn't change which notes pass 0.55, and the agent reads every note that passes. The right note is in the top 5 for 96% of the queries but scores above 0.55 for 74%, so the cut is the next thing to work on, not the order.
+
 ### Caveats
 
 - 50 answerable and 10 no-answer queries is a small set. Each no-answer query is worth 10 points of false positive rate, so 10% means one query.
@@ -81,11 +96,11 @@ One more English query lands in the top 5 and the false positive rate stays the 
 ### Reproduce
 
 ```bash
-make eval         # 12 configs + related and Links experiments, writes eval/results/
+make eval         # 12 configs + related, Links and hybrid search experiments, writes eval/results/
 make eval-quick   # CI gate: production config, 10 fixed queries, fails below Recall@5 0.8
 ```
 
-`make eval` runs on CPU and downloads e5-small and bge-m3 the first time (about 2.5 GB in the Hugging Face cache). `make eval-quick` runs on every push and pull request in [CI](.github/workflows/ci.yml) and currently gives Recall@5 0.9 (q026, a paraphrase about `git revert`, misses in the full eval too).
+`make eval` runs on CPU and downloads e5-small, bge-m3 and the two rerankers the first time (about 5 GB in the Hugging Face cache). The bge-reranker-v2-m3 part alone takes about 2 hours on CPU; `uv run python -m eval.run_eval --rerankers mminilm` skips it. `make eval-quick` runs on every push and pull request in [CI](.github/workflows/ci.yml) and currently gives Recall@5 0.9 (q026, a paraphrase about `git revert`, misses in the full eval too).
 
 ## By the numbers
 

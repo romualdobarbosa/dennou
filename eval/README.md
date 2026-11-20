@@ -57,7 +57,7 @@ Ele confere as contagens, o frontmatter, se os ids batem com os nomes dos arquiv
 ## Como rodar o eval
 
 ```bash
-make eval         # as 12 configs e os experimentos do related e da seção Links, grava em eval/results/
+make eval         # as 12 configs e os experimentos do related, da seção Links e da busca híbrida, grava em eval/results/
 make eval-quick   # gate do CI, 10 perguntas fixas com a config de produção
 ```
 
@@ -91,6 +91,14 @@ Na melhor config por nDCG@5, as notas listadas no `related` das top-3 entram com
 ### Seção `## Links`
 
 Toda nota termina com `## Links`, os wiki-links do Obsidian pras notas relacionadas. Isso é navegação, não conteúdo, e embedado vira texto feito de nomes de arquivo de outras notas. O experimento roda a config de produção de novo com a seção invertida (com, se a produção tira; sem, se a produção mantém) e grava `eval/results/links_section.json`. Sem a seção, o Recall@5 foi de 0.940 pra 0.960 (uma pergunta em inglês a mais no top-5), o nDCG@5 de 0.819 pra 0.832, e o falso positivo em 0.55 ficou em 10%. Adotei, com `embed.KEEP_LINKS_SECTION = False`, e o eval inteiro usa o mesmo texto que a produção.
+
+### Busca híbrida e rerank
+
+Queria saber se dava pra melhorar a busca de produção sem trocar o modelo. O experimento roda em cima do ranking vetorial da `minilm-chunk-title` e grava `eval/results/hybrid_rerank.json`. Testei BM25 sozinho (lexical, sobre título e corpo da nota, sem `## Links`), duas fusões com o vetorial (RRF com k = 60, e a soma a × cosseno + (1 − a) × BM25 normalizado, com a = 0.5, 0.7 e 0.9) e o rerank do top-20 com dois cross-encoders multilíngues, o `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` e o `BAAI/bge-reranker-v2-m3`. O corte continua no cosseno de produção, então o falso positivo em 0.55 fica em 10% em todas as variantes.
+
+A soma com a = 0.7 sobe o Recall@1 de 0.720 pra 0.860 e o MRR de 0.802 pra 0.896, quase de graça (0,1 ms a mais por busca). Em troca ela perde a q043 do top-5, uma pergunta em inglês, porque o BM25 não ajuda quando a pergunta e a nota estão em línguas diferentes, e o Recall@5 cai de 0.960 pra 0.940. O `bge-reranker-v2-m3` foi o melhor em tudo (Recall@5 0.980, MRR 0.918), mas leva uns 58 s por busca em CPU. O mMiniLM leva uns 4,5 s e ainda perde uma pergunta de cauda.
+
+Só que o Recall@5 contando só as notas acima de 0.55 ficou em 0.740 em todas as variantes, porque mudar a ordem não muda quais notas passam do corte. Usar o score da soma como corte também não ajudou (de 0.580 a 0.700 no threshold sugerido). O agente lê todas as notas que passam do corte, então subir a nota certa de 3º pra 1º muda pouco pra ele. Não adotei nenhuma variante. O gargalo é o corte (a nota certa está no top-5 em 96% das perguntas, mas passa de 0.55 em 74%), e é por ele que quero seguir.
 
 ### Gate do CI
 

@@ -166,10 +166,10 @@
     "criterion": "maior Recall@5 (só notas com score >= t) com FP <= 10%"
   },
   "timing": {
-    "query_p50_ms": 10.58,
-    "query_p95_ms": 13.07,
-    "index_total_s": 12.756,
-    "model_load_s": 0.0
+    "query_p50_ms": 10.77,
+    "query_p95_ms": 14.53,
+    "index_total_s": 13.399,
+    "model_load_s": 0.633
   },
   "queries": [
     {
@@ -2003,8 +2003,8 @@
     "long_notes_over_max_seq_length": 12,
     "vault": "eval/vault",
     "env": {
-      "date": "2026-11-19T04:22:47+00:00",
-      "commit": "a91aac4",
+      "date": "2026-11-19T22:18:15+00:00",
+      "commit": "98d016c",
       "device": "cpu",
       "cpu": "13th Gen Intel(R) Core(TM) i5-13420H",
       "torch_threads": 8,

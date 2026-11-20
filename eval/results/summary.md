@@ -8,7 +8,7 @@ Gerado por `make eval` em 2026-11-19 (commit `a91aac4`), device `cpu` (13th Gen 
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | minilm-whole-title | 0.700 | 0.860 | 0.880 | 0.779 | 0.775 | 0% | 0.540 | 0.50 (0.600 / 10%) | 14.1 | 25.6 | 3.4 |
 | minilm-whole-notitle | 0.660 | 0.860 | 0.920 | 0.766 | 0.793 | 0% | 0.380 | 0.45 (0.720 / 10%) | 13.8 | 16.3 | 3.3 |
-| **minilm-chunk-title** | 0.720 | 0.820 | 0.960 | 0.802 | 0.832 | 10% | 0.740 | 0.55 (0.740 / 10%) | 10.6 | 13.1 | 12.8 |
+| **minilm-chunk-title** | 0.720 | 0.820 | 0.960 | 0.802 | 0.832 | 10% | 0.740 | 0.55 (0.740 / 10%) | 10.8 | 14.5 | 13.4 |
 | minilm-chunk-notitle | 0.700 | 0.860 | 0.960 | 0.799 | 0.813 | 20% | 0.720 | 0.60 (0.480 / 0%) | 11.3 | 27.9 | 11.7 |
 | e5-small-whole-title | 0.720 | 0.840 | 0.860 | 0.780 | 0.769 | 100% | 0.860 | 0.90 (0.260 / 0%) | 14.5 | 32.0 | 19.7 |
 | e5-small-whole-notitle | 0.700 | 0.840 | 0.880 | 0.777 | 0.765 | 100% | 0.880 | 0.90 (0.280 / 0%) | 14.8 | 17.2 | 7.5 |
@@ -46,6 +46,23 @@ Os wiki-links do fim da nota são nomes de outras notas, não conteúdo. Produç
 |---|---|---|---|---|---|---|---|
 | com `## Links` | 0.940 | 0.819 | 0.799 | 1.000 | 10% | 0.740 | 516 |
 | **sem `## Links`** | 0.960 | 0.832 | 0.802 | 1.000 | 10% | 0.740 | 475 |
+
+## Busca híbrida e rerank (minilm-chunk-title)
+
+Rankings alternativos em cima do vetorial de produção. `bm25` é só lexical; `rrf` funde vetorial e BM25 (k=60); `weighted-a` soma a × cosseno + (1 − a) × BM25 normalizado; `rerank-X@base` reordena o top-20 da base com um cross-encoder. O corte continua no cosseno (cosseno >= 0.55), então o FP fica igual ao da produção; a coluna "t próprio" é o corte no score do reranker com FP ≤ 10%. Latência extra = BM25 + rerank por pergunta, somada à do vetorial.
+
+| variante | R@1 | R@5 | MRR | nDCG@5 | R@5 cauda | R@5 com t=0.55 | t próprio (R@5 / FP) | +p50 ms | +p95 ms | erra no top-5 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **vector** | 0.720 | 0.960 | 0.802 | 0.832 | 1.000 | 0.740 | 0.55 (0.740 / 10%) | 0.0 | 0.0 | q026, q032 |
+| bm25 | 0.820 | 0.860 | 0.842 | 0.809 | 1.000 | 0.740 | — | 0.1 | 0.1 | q026, q032, q034, q037, q042, q043, q050 |
+| rrf | 0.820 | 0.920 | 0.856 | 0.848 | 1.000 | 0.740 | — | 0.1 | 0.1 | q026, q032, q043, q050 |
+| weighted-0.5 | 0.860 | 0.900 | 0.882 | 0.850 | 1.000 | 0.740 | 0.80 (0.580 / 0%) | 0.1 | 0.1 | q026, q032, q037, q043, q050 |
+| weighted-0.7 | 0.860 | 0.940 | 0.896 | 0.873 | 1.000 | 0.740 | 0.70 (0.640 / 0%) | 0.1 | 0.1 | q026, q032, q043 |
+| weighted-0.9 | 0.840 | 0.940 | 0.886 | 0.876 | 1.000 | 0.740 | 0.60 (0.700 / 0%) | 0.1 | 0.1 | q026, q032, q043 |
+| rerank-mminilm@vector | 0.880 | 0.940 | 0.907 | 0.881 | 0.917 | 0.740 | 0.60 (0.720 / 10%) | 4500.1 | 5880.2 | q026, q032, q040 |
+| rerank-mminilm@weighted-0.9 | 0.880 | 0.940 | 0.907 | 0.881 | 0.917 | 0.740 | 0.60 (0.720 / 10%) | 4889.6 | 6155.7 | q026, q032, q040 |
+| rerank-bge-reranker@vector | 0.880 | 0.980 | 0.918 | 0.912 | 1.000 | 0.740 | 0.10 (0.800 / 10%) | 57926.5 | 76736.7 | q032 |
+| rerank-bge-reranker@weighted-0.9 | 0.880 | 0.980 | 0.918 | 0.912 | 1.000 | 0.740 | 0.10 (0.800 / 10%) | 59589.4 | 73680.4 | q032 |
 
 ## Expansão pelo campo related (bge-m3-chunk-notitle)
 

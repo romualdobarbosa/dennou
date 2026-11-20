@@ -29,8 +29,9 @@ demo:
 
 # Eval de retrieval no vault sintético de eval/vault (não toca no vault real).
 # eval: as 12 configs (3 modelos x nota inteira/chunks x com/sem título) e os
-# experimentos do related e da seção ## Links; grava eval/results/. Baixa e5-small e
-# bge-m3 (~2.5 GB).
+# experimentos do related, da seção ## Links e da busca híbrida/rerank; grava
+# eval/results/. Baixa e5-small, bge-m3 e os dois rerankers (~5 GB); o
+# bge-reranker leva ~2 h em CPU (--rerankers mminilm pula ele).
 eval:
 	uv run python -m eval.run_eval
 
