@@ -166,7 +166,7 @@ flowchart LR
 ```
 
 - `embed.py` parses the frontmatter, drops the `## Links` section, packs whole paragraphs into chunks of up to 128 tokens with the title in front, and stores one vector per chunk (`<note_id>#<n>`). A note's score is its best chunk's score, and each note shows up once in the results.
-- The agent follows [`CLAUDE.md`](CLAUDE.md). It runs `embed.py search` before answering a knowledge question, uses notes at or above 0.55 and cites them, and only writes a note (following [`SCHEMA.md`](SCHEMA.md)) when asked.
+- The agent follows [`CLAUDE.md`](CLAUDE.md). It runs `embed.py search` before answering a knowledge question, judges the 5 results by excerpt (the score is a hint), opens a note before using it, cites what it used, and only writes a note (following [`SCHEMA.md`](SCHEMA.md)) when asked.
 - `bot.py` forwards Telegram messages to `claude -p` in the project directory and sends the answer back.
 - Every CLI search appends a JSON line to `logs/search.jsonl` (query, note ids and scores, how many passed the cut, latency, model). `logs/` is gitignored.
 
