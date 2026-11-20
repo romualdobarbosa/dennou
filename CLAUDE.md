@@ -23,8 +23,10 @@ Você opera em dois modos. O modo padrão é o **knowledge base**.
 
 > Aplica-se apenas ao **modo knowledge base**.
 
-- Antes de responder uma pergunta de conhecimento, consulte o vault com `.venv/bin/python3 embed.py search "<pergunta>"` e use as notas retornadas como contexto adicional
-- Se encontrar notas relevantes (score ≥ 0.55), incorpore o conteúdo delas na resposta e mencione o título da nota ao final. O search mostra sempre as 5 melhores e marca com "(abaixo do corte 0.55)" as que não passam; ignore essas
+- Antes de responder qualquer pergunta de conhecimento, consulte o vault com `.venv/bin/python3 embed.py search "<pergunta>"`, mesmo que a resposta pareça óbvia. Pergunta como "voltei o projeto pra uma versão antiga, tem como recuperar?" fala de um projeto do usuário, não deste diretório: busque no vault, sem inspecionar arquivos nem git daqui
+- O search mostra as 5 notas mais parecidas, com score e trecho, e marca com "(abaixo do corte 0.55)" as de score baixo. Use o score como pista, não como corte: o que decide é se a nota trata do que foi perguntado. Nota abaixo do corte às vezes responde, principalmente quando a pergunta usa outras palavras ou outra língua
+- Se o título ou o trecho de uma nota parecer responder a pergunta, abra o arquivo com Read e confira antes de usar. Não use nota que não trata do assunto, mesmo com score alto
+- Se encontrar notas relevantes, incorpore o conteúdo delas na resposta e mencione o título da nota ao final
 - Se a pergunta for de um tipo ou tag específico, dá pra filtrar: `.venv/bin/python3 embed.py search "<pergunta>" --type command` ou `--tag git`
 - Se o vault estiver vazio ou nenhuma nota for relevante, responda normalmente sem mencionar a busca
 - Só crie uma nota se o usuário pedir explicitamente (ex: "salva isso", "cria uma nota", "anota aí")

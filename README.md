@@ -52,7 +52,7 @@ The old pipeline embedded title and body as one vector. `paraphrase-multilingual
 
 ### How the 0.55 cut was picked
 
-`embed.py search` always prints the top 5 and flags the ones below the cut, and the agent ignores those. For each config the harness sweeps the cut from 0.0 to 1.0 in steps of 0.05 and computes two things, the false positive rate on the 10 no-answer queries and Recall@5 counting only notes above the cut. The suggested cut is the one with the highest recall at no more than 10% false positives. For production that is 0.55 (Recall@5 0.740 above the cut, 10% FP). The old cut was 0.4, and it had never been measured. Scores are not comparable across models (with e5 almost everything scores above 0.7, so FP@0.55 is 100%), so the cut only holds for this model and chunking.
+`embed.py search` always prints the top 5 and flags the ones below the cut. Until November 2026 the agent ignored those (now the score is only a hint, see [Answer evaluation](#answer-evaluation)). For each config the harness sweeps the cut from 0.0 to 1.0 in steps of 0.05 and computes two things, the false positive rate on the 10 no-answer queries and Recall@5 counting only notes above the cut. The suggested cut is the one with the highest recall at no more than 10% false positives. For production that is 0.55 (Recall@5 0.740 above the cut, 10% FP). The old cut was 0.4, and it had never been measured. Scores are not comparable across models (with e5 almost everything scores above 0.7, so FP@0.55 is 100%), so the cut only holds for this model and chunking.
 
 ### Three more experiments
 
@@ -86,18 +86,45 @@ On top of the production ranking I tried BM25 alone, two fusions with the vector
 
 Weighted fusion puts the right note first much more often for almost no cost, but loses an English query from the top 5, since BM25 can't match English words against Portuguese notes. bge-reranker-v2-m3 wins on every metric and takes about a minute per search on CPU. None of them changes Recall@5 above the cut, because reordering doesn't change which notes pass 0.55, and the agent reads every note that passes. The right note is in the top 5 for 96% of the queries but scores above 0.55 for 74%, so the cut is the next thing to work on, not the order.
 
+### Answer evaluation
+
+Retrieval stops at the top 5. The right note was there for 96% of the queries but scored above 0.55 for 74%, and the agent skipped everything below the cut. So I measured the other end, whether the agent uses the right note and whether the answer is faithful to it. Two scripts call `claude -p`. Sonnet answers, and Opus judges whether the answer is correct and whether what it credits to a note is actually in that note.
+
+The controlled run ([`run_generation_eval.py`](eval/run_generation_eval.py), [results](eval/results/generation/summary.md)) does the search itself, puts the notes each rule lets through into the prompt in full, and the model answers with no tools, returning the ids of the notes it used. All 60 queries:
+
+| rule | right note in the prompt | cited the right note | faithful | false positives | mean prompt |
+|---|---|---|---|---|---|
+| A: only notes ≥ 0.55 (the old rule) | 74% | 74% | 98% | 0 of 10 | 3,706 chars |
+| B: ≥ 0.55 plus a "maybe" band from 0.45 to 0.55 | 84% | 84% | 100% | 0 of 10 | 6,130 chars |
+| C: the whole top 5 with scores, the model decides | 96% | 96% | 98% | 0 of 10 | 11,686 chars |
+
+When the right note reaches the model, the model uses it. On paraphrases, citing the right note went from 27% (A) to 87% (C). Even with the whole top 5 in front of it, it cited nothing on the 10 no-answer queries, including the one whose top result scores above 0.55. The judge's "correct" was 100% everywhere and tells the rules apart in nothing, since Sonnet knows Git and SQL without the vault.
+
+In real use the model doesn't get whole notes. `search` prints a 200-character excerpt and the agent decides whether to open the file. The agent run ([`run_agent_eval.py`](eval/run_agent_eval.py), [results](eval/results/agent/summary.md)) runs dennou itself. Each query is a `claude -p` with the same tools and permissions as `bot.py`, in a copy of the project with the eval vault. Both rules use the same `CLAUDE.md` except for the paragraph about the cut. The 35 queries where the cut matters (paraphrase, English, no-answer):
+
+| rule | searched the vault | cited the right note | right note only below 0.55: cited | false positives | faithful | notes opened per query | mean time |
+|---|---|---|---|---|---|---|---|
+| cut: skip notes below 0.55 | 97% | 76% | 0 of 4 | 0 of 10 | 94% | 0.1 | 14 s |
+| **hint: the score is a hint, open the note before using it (production)** | 100% | 96% | 5 of 5 | 0 of 10 | 94% | 0.8 | 14 s |
+
+The agent rewrites the query before searching (sometimes adding English terms), which moves the scores, so the number of queries with the right note only below the cut differs between rules (4 and 5). With the new rule it recovered all of them, cited nothing on no-answer queries, and took no extra time. Each rule had two unfaithful answers. Under "hint" it opened the note and still credited it with things from its own knowledge. Under "cut" it cited a note from the excerpt alone and got wrong what the note says. `CLAUDE.md` now uses the hint rule. In an earlier run with the old `CLAUDE.md`, the agent skipped the search on three paraphrases (it read "I reverted the project to an old version" as a question about the directory it runs in), so `CLAUDE.md` now tells it to always search, and the numbers above include that.
+
+One run per query, the cut column rests on 4 or 5 cases, and the judge is the same model family as the answerer. The agent run cost about US$4.70 at list price and the controlled one about US$8.50, both through a Claude subscription. If you reproduce it, Claude Code doesn't load a `CLAUDE.md` from a directory under `/tmp`, so the project copy lives in `~/.cache/dennou-agent-eval`.
+
 ### Caveats
 
 - 50 answerable and 10 no-answer queries is a small set. Each no-answer query is worth 10 points of false positive rate, so 10% means one query.
 - I wrote the notes and the queries (with an agent's help), so the queries lean toward the notes' vocabulary. Paraphrase and cross-lingual queries are there to soften that, not to remove it. The numbers are good for comparing retrieval versions against each other, not as an absolute measure.
 - There is no held-out query set. Every choice here (model, chunking, cut, the λ values of the related experiment) was made on the same 60 queries it is reported on.
-- It only measures retrieval. Whether the agent's answer is faithful to the notes is not evaluated.
+- Answer quality is measured on 60 (controlled) and 35 (agent) queries with one run each, judged by a model from the same family. See [Answer evaluation](#answer-evaluation).
 
 ### Reproduce
 
 ```bash
 make eval         # 12 configs + related, Links and hybrid search experiments, writes eval/results/
 make eval-quick   # CI gate: production config, 10 fixed queries, fails below Recall@5 0.8
+uv run python -m eval.run_generation_eval   # answer eval, controlled (needs the claude CLI)
+uv run python -m eval.run_agent_eval        # answer eval, real agent (needs the claude CLI)
 ```
 
 `make eval` runs on CPU and downloads e5-small, bge-m3 and the two rerankers the first time (about 5 GB in the Hugging Face cache). The bge-reranker-v2-m3 part alone takes about 2 hours on CPU; `uv run python -m eval.run_eval --rerankers mminilm` skips it. `make eval-quick` runs on every push and pull request in [CI](.github/workflows/ci.yml) and currently gives Recall@5 0.9 (q026, a paraphrase about `git revert`, misses in the full eval too).
@@ -114,6 +141,8 @@ make eval-quick   # CI gate: production config, 10 fixed queries, fails below Re
 | Eval notes over MiniLM's 128-token limit | 80 of 80 | [`eval/results/summary.md`](eval/results/summary.md) |
 | False positive rate at the 0.55 cut | 10% (1 of 10) | [`eval/results/summary.md`](eval/results/summary.md) |
 | Recall@5 counting only notes above 0.55 | 0.740 | [`eval/results/summary.md`](eval/results/summary.md) |
+| Agent cites the right note, 25 paraphrase/English queries (old cut rule → hint rule) | 76% → 96% | [`eval/results/agent/summary.md`](eval/results/agent/summary.md) |
+| Agent cites a note on no-answer queries | 0 of 10 | [`eval/results/agent/summary.md`](eval/results/agent/summary.md) |
 | Query latency p50 / p95, production (CPU) | 10.6 / 13.1 ms | [`eval/results/summary.md`](eval/results/summary.md) |
 | Eval set | 80 notes, 60 queries (25 literal, 15 paraphrase, 10 cross-lingual, 10 no-answer) | [`eval/manifest.json`](eval/manifest.json) |
 | Configs compared | 12 (3 models × whole/chunk × with/without title) | [`eval/results/`](eval/results/) |
@@ -157,7 +186,7 @@ With MiniLM, chunks with and without the title tie on Recall@5 (0.960). The vers
 
 ### A cut, and still showing what falls under it
 
-Search prints 5 results and marks the ones under 0.55, so a person reading the output still sees them and the agent knows to skip them. The cut is configurable (`DENNOU_SCORE_THRESHOLD`) because it only holds for this model and chunking. If either changes, `make eval` has to run again.
+Search prints 5 results and marks the ones under 0.55, so a person reading the output still sees them. The agent used to skip them. Since the [answer evaluation](#answer-evaluation) it reads the mark as a hint and judges each note by its excerpt, which took citing the right note from 76% to 96% with no false positives. The cut is configurable (`DENNOU_SCORE_THRESHOLD`) because it only holds for this model and chunking. If either changes, `make eval` has to run again.
 
 ### `sync` rebuilds into a staging collection
 
@@ -180,8 +209,8 @@ The same list also let `Read`, `Write`, `Edit`, `Glob` and `Grep` run with no pa
 ## Limitations
 
 - The eval is small and synthetic, written by the same person (plus an agent) who wrote the notes. See the caveats above.
-- Only retrieval is measured. There is no evaluation of the generated answers.
-- No hybrid search (BM25) and no reranking yet.
+- The answer evaluation is one run per query on a synthetic vault, where Sonnet already knows most answers, so "correct" can't tell versions apart. What it measures well is whether the agent uses the right note.
+- No hybrid search (BM25) and no reranking in production (both tested, see above).
 - There is no GIF or recorded demo of the Telegram bot.
 - Notes created from the phone in Obsidian only get indexed when `embed.py add` (or `sync`) runs on the PC.
 - The bot's agent can still read any file inside the repo that isn't a secret, because Claude Code allows reads in the working directory by default. Only `.env` and `.bot_session` are denied.
