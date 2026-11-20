@@ -59,6 +59,8 @@ Ele confere as contagens, o frontmatter, se os ids batem com os nomes dos arquiv
 ```bash
 make eval         # as 12 configs e os experimentos do related, da seção Links e da busca híbrida, grava em eval/results/
 make eval-quick   # gate do CI, 10 perguntas fixas com a config de produção
+uv run python -m eval.run_generation_eval   # eval de geração, modo controlado (claude -p)
+uv run python -m eval.run_agent_eval        # eval de geração, modo agente (claude -p)
 ```
 
 O `make eval` roda tudo em CPU (dá pra trocar com `uv run python -m eval.run_eval --device cuda`) e baixa o e5-small e o bge-m3 na primeira vez, uns 2,5 GB no cache do Hugging Face. Cada config indexa `eval/vault` num Chroma temporário, com distância cosseno igual à produção, e nunca encosta no vault real nem no `chroma_db/`. Os resultados ficam em `eval/results/<config>.json`, com as métricas, a curva de threshold, o top-5 de cada pergunta e os metadados da rodada (modelo, `max_seq_length`, chunking, commit, CPU, versão do torch). A tabela comparativa sai em `eval/results/summary.md`.
@@ -82,7 +84,7 @@ Também separo o Recall@5 das 12 perguntas de cauda, as do `tail_answer_queries`
 
 ### Threshold
 
-O agente só usa nota com score ≥ 0.55 (`DENNOU_SCORE_THRESHOLD`, que antes era 0.4). Pra cada config calculo uma curva de 0.0 a 1.0, de 0.05 em 0.05. Num eixo fica o falso positivo, que é a fração das perguntas `no_answer` cujo top-1 passa do threshold (o agente usaria uma nota que não responde nada). No outro fica o Recall@5 das perguntas com resposta contando só as notas acima do threshold. O threshold sugerido é o de maior recall com falso positivo de no máximo 10% (no empate, o menor falso positivo e depois o threshold mais alto). Com só 10 perguntas sem resposta, cada uma vale 10 pontos de falso positivo, então trate esse número como indicação e não como valor exato. O score muda de escala entre modelos (no e5 tudo fica acima de 0.7), por isso o threshold não passa de um modelo pro outro.
+O search marca as notas com score abaixo de 0.55 (`DENNOU_SCORE_THRESHOLD`, que antes era 0.4). Até 20/11/2026 o agente ignorava essas notas, e hoje o score é só uma pista pra ele (veja o eval de geração, abaixo). Pra cada config calculo uma curva de 0.0 a 1.0, de 0.05 em 0.05. Num eixo fica o falso positivo, que é a fração das perguntas `no_answer` cujo top-1 passa do threshold (o agente usaria uma nota que não responde nada). No outro fica o Recall@5 das perguntas com resposta contando só as notas acima do threshold. O threshold sugerido é o de maior recall com falso positivo de no máximo 10% (no empate, o menor falso positivo e depois o threshold mais alto). Com só 10 perguntas sem resposta, cada uma vale 10 pontos de falso positivo, então trate esse número como indicação e não como valor exato. O score muda de escala entre modelos (no e5 tudo fica acima de 0.7), por isso o threshold não passa de um modelo pro outro.
 
 ### Expansão pelo related
 
@@ -99,6 +101,33 @@ Queria saber se dava pra melhorar a busca de produção sem trocar o modelo. O e
 A soma com a = 0.7 sobe o Recall@1 de 0.720 pra 0.860 e o MRR de 0.802 pra 0.896, quase de graça (0,1 ms a mais por busca). Em troca ela perde a q043 do top-5, uma pergunta em inglês, porque o BM25 não ajuda quando a pergunta e a nota estão em línguas diferentes, e o Recall@5 cai de 0.960 pra 0.940. O `bge-reranker-v2-m3` foi o melhor em tudo (Recall@5 0.980, MRR 0.918), mas leva uns 58 s por busca em CPU. O mMiniLM leva uns 4,5 s e ainda perde uma pergunta de cauda.
 
 Só que o Recall@5 contando só as notas acima de 0.55 ficou em 0.740 em todas as variantes, porque mudar a ordem não muda quais notas passam do corte. Usar o score da soma como corte também não ajudou (de 0.580 a 0.700 no threshold sugerido). O agente lê todas as notas que passam do corte, então subir a nota certa de 3º pra 1º muda pouco pra ele. Não adotei nenhuma variante. O gargalo é o corte (a nota certa está no top-5 em 96% das perguntas, mas passa de 0.55 em 74%), e é por ele que quero seguir.
+
+### Eval de geração
+
+O eval de retrieval para no top-5. Ele dizia que a nota certa estava ali em 96% das perguntas, mas passava de 0.55 em 74%, e o agente ignorava o que ficava abaixo. Faltava medir a outra ponta, se o agente usa a nota certa e se a resposta é fiel a ela. São dois scripts, os dois chamam o `claude -p` (pela assinatura, sem chave de API), o Sonnet responde e o Opus julga se a resposta está correta e se o que ela atribui à nota está mesmo na nota. Cada chamada fica em cache, então rodar de novo só faz o que falta.
+
+O primeiro, `run_generation_eval.py`, é o modo controlado. A busca roda dentro do script, as notas que a variante deixa passar vão inteiras no prompt e o modelo responde sem ferramentas, devolvendo a resposta e os ids das notas que usou. Testei três regras nas 60 perguntas, e os resultados ficam em `eval/results/generation/`.
+
+| regra | nota certa no prompt | citou nota certa | fiel | falso positivo | prompt médio |
+|---|---|---|---|---|---|
+| A: só notas ≥ 0.55 (a regra de antes) | 74% | 74% | 98% | 0 de 10 | 3.706 caracteres |
+| B: ≥ 0.55, mais uma faixa "talvez" de 0.45 a 0.55 | 84% | 84% | 100% | 0 de 10 | 6.130 caracteres |
+| C: top-5 inteiro com o score, o modelo decide | 96% | 96% | 98% | 0 de 10 | 11.686 caracteres |
+
+Quando a nota certa chega ao modelo, ele usa (as duas primeiras colunas batem nas três regras). Nas paráfrases, citar a nota certa foi de 27% na A pra 87% na C. E mesmo vendo o top-5 inteiro, ele não citou nota em nenhuma das 10 perguntas sem resposta, inclusive na que tem o top-1 acima de 0.55. A coluna "correta" do juiz deu 100% em tudo e não separa nada, porque o Sonnet sabe Git e SQL sem precisar do vault.
+
+Só que no modo controlado o modelo lê a nota inteira, e no uso real o `search` mostra um trecho de 200 caracteres e o agente decide se abre o arquivo. O segundo script, `run_agent_eval.py`, roda o dennou de verdade. Cada pergunta vira um `claude -p` com as mesmas ferramentas e permissões do `bot.py`, numa cópia do projeto em `~/.cache/dennou-agent-eval` com o vault do eval. As duas regras têm o mesmo `CLAUDE.md` e só mudam o parágrafo do corte. Rodei as 35 perguntas em que o corte pesa (paráfrase, inglês e sem resposta). A nota citada é achada no código, procurando título, nome do arquivo ou id na resposta, e só conta nota que o agente viu na busca ou abriu.
+
+| regra | buscou no vault | citou nota certa | nota certa só abaixo de 0.55: citou | falso positivo | fiel | notas abertas por pergunta | tempo médio |
+|---|---|---|---|---|---|---|---|
+| corte: ignora notas abaixo de 0.55 | 97% | 76% | 0 de 4 | 0 de 10 | 94% | 0,1 | 14 s |
+| pista: o score é pista, o agente abre a nota antes de usar | 100% | 96% | 5 de 5 | 0 de 10 | 94% | 0,8 | 14 s |
+
+O agente não manda a pergunta crua pro `search`. Ele reescreve, às vezes junta termo em inglês, e isso muda o score, por isso o número de perguntas com a nota certa só abaixo do corte varia de uma regra pra outra (4 e 5). Com a regra nova ele recuperou todas e não citou nada nas perguntas sem resposta, sem gastar tempo a mais. Cada regra teve duas respostas infiéis. Na "pista", ele abriu a nota e mesmo assim pôs na conta dela coisas que eram conhecimento próprio. Na "corte", ele citou a nota só pelo trecho, sem abrir, e errou o que ela diz.
+
+Adotei a regra "pista" no `CLAUDE.md`. Numa rodada anterior, com o `CLAUDE.md` de antes, o agente pulou a busca em três paráfrases, tratando "voltei o projeto pra uma versão antiga" como pergunta sobre o diretório onde ele roda. Por isso o `CLAUDE.md` agora manda buscar sempre, e esses números já são com essa instrução.
+
+Os limites são os de sempre, e mais alguns. Foi uma rodada por pergunta, a coluna do corte se apoia em 4 ou 5 casos, e o juiz é da mesma família do modelo que responde. O modo agente custou uns US$ 4,70 em preço de lista, e o controlado uns US$ 8,50. Pra quem for reproduzir, rodando de dentro do `/tmp`, o Claude Code não carrega o `CLAUDE.md` do diretório, então a cópia do projeto fica em `~/.cache`. As transcrições (`eval/results/agent/runs.jsonl`) ficam fora do git, porque trazem caminhos locais.
 
 ### Gate do CI
 

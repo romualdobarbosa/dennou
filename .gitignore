@@ -24,3 +24,8 @@ vault/.obsidian/themes/
 vault/.obsidian/graph.json
 # community-plugins.json: Obsidian reescreve o formato e suja o git status
 vault/.obsidian/community-plugins.json
+
+# Caches dos evals de geração (as transcrições do agente têm caminhos locais);
+# os resultados (results.json, summary.md) vão no git
+eval/results/agent/runs.jsonl
+eval/results/generation/calls.jsonl
