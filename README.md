@@ -150,20 +150,7 @@ uv run python -m eval.run_agent_eval        # answer eval, real agent (needs the
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    phone["Telegram<br/>(owner chat_id only)"] --> bot["bot.py<br/>long polling"]
-    bot -->|"claude -p<br/>restricted tools"| agent["Claude Code agent<br/>(CLAUDE.md rules)"]
-    agent -->|"embed.py search<br/>top 5, cut 0.55"| embed
-    agent -->|"writes notes, embed.py add"| vault
-    vault["vault/*.md<br/>Obsidian notes"] -->|"embed.py sync / add"| embed["embed.py<br/>parse, drop Links section,<br/>title-prefixed chunks"]
-    embed <-->|"one vector per chunk"| chroma[("ChromaDB<br/>chroma_db/")]
-    subgraph harness ["eval harness"]
-        evault["eval/vault<br/>80 synthetic notes<br/>+ 60 graded queries"] --> run["eval/run_eval.py"]
-        run --> results["eval/results/"]
-    end
-    run -->|"same functions,<br/>temporary Chroma"| embed
-```
+![Architecture diagram. A Telegram message goes through bot.py to a headless Claude Code agent, which can also run in the terminal. The agent always searches first with embed.py search, which returns the top 5 and treats the score as a hint, flagging results below 0.55. embed.py embeds the query with MiniLM on CPU and reads title-prefixed chunks from ChromaDB. The agent opens a note with Read before citing it, and when asked it writes a note to the vault and indexes it with embed.py add. The eval harness reuses the same functions with a temporary Chroma for retrieval, runs the real agent with an Opus judge for answers, and CI runs a 10-query gate](docs/img/arquitetura.png)
 
 - `embed.py` parses the frontmatter, drops the `## Links` section, packs whole paragraphs into chunks of up to 128 tokens with the title in front, and stores one vector per chunk (`<note_id>#<n>`). A note's score is its best chunk's score, and each note shows up once in the results.
 - The agent follows [`CLAUDE.md`](CLAUDE.md). It runs `embed.py search` before answering a knowledge question, judges the 5 results by excerpt (the score is a hint), opens a note before using it, cites what it used, and only writes a note (following [`SCHEMA.md`](SCHEMA.md)) when asked.
